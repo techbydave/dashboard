@@ -25,13 +25,13 @@ Until Supabase is connected, the site runs on **sample data** (clearly labelled)
 
 ### 1. Create the database and your login
 1. At [supabase.com](https://supabase.com), create a **new project** called `techbydave-dashboard` (free plan).
-2. Open [`supabase/schema.sql`](supabase/schema.sql), change `YOUR-EMAIL@example.com` to the email you'll sign in with, paste the whole file into **SQL Editor → New query**, and click **Run**.
+2. Paste everything from [`supabase/schema.sql`](supabase/schema.sql) into **SQL Editor → New query** and click **Run**. It approves **dave@techbydave.com** as the only account that can see the data.
 3. **Authentication → Sign In / Providers → Email:** turn **off** "Allow new users to sign up". Only you get in.
-4. **Authentication → Users → Add user → Create new user:** enter your email and a strong password, and tick **Auto Confirm User**.
+4. **Authentication → Users → Add user → Create new user:** enter `dave@techbydave.com` and your password, and tick **Auto Confirm User**. The password lives only in Supabase, never in this repo.
 5. **Authentication → URL Configuration:** set **Site URL** to `https://dashboard.techbydave.com` and add the same address under **Redirect URLs**. This makes "Forgot password?" work.
 6. Optional but recommended: **Authentication → Emails → SMTP Settings**. Use host `smtp.resend.com`, port `465`, user `resend`, password = a Resend API key, and sender `noreply@techbydave.com`, so password-reset emails come from your domain.
 
-Even if someone found a way to make an account, the database only shows data to the email in step 2.
+Even if someone found a way to make an account, the database only shows data to dave@techbydave.com.
 
 ### 2. Get the API keys
 - **Cloudflare:** go to [dash.cloudflare.com](https://dash.cloudflare.com) → **My Profile → API Tokens → Create Token → Custom token**. Give it the permission **Account → Account Analytics → Read** and create it. Your **Account ID** is on your account's home page (right-hand side).

@@ -1,6 +1,6 @@
 -- TechByDave Dashboard: database setup
--- 1. Change the email on the line marked  <-- YOUR EMAIL  to the one you'll sign in with.
--- 2. Paste this whole file into Supabase -> SQL Editor -> New query, then click Run.
+-- Only dave@techbydave.com can see the dashboard's data (see the admins table below).
+-- Paste this whole file into Supabase -> SQL Editor -> New query, then click Run.
 -- Safe to run more than once.
 
 -- ---------------------------------------------------------------------------
@@ -11,7 +11,7 @@ create table if not exists public.admins (
 );
 alter table public.admins enable row level security;
 
-insert into public.admins (email) values (lower('YOUR-EMAIL@example.com'))   -- <-- YOUR EMAIL
+insert into public.admins (email) values ('dave@techbydave.com')   -- the only approved account
 on conflict do nothing;
 
 create or replace function public.is_admin()
