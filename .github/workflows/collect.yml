@@ -1,0 +1,29 @@
+name: Collect analytics
+
+on:
+  # Twice a day (about 6am and 6pm Toronto). Run it by hand from the Actions tab anytime.
+  schedule:
+    - cron: "23 11,23 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Collect numbers
+        run: node scripts/collect.mjs
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
+          CF_SITE_TAG: ${{ vars.CF_SITE_TAG }}
+          SITE_HOST: ${{ vars.SITE_HOST }}
+          KIT_API_KEY: ${{ secrets.KIT_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          YOUTUBE_HANDLE: ${{ vars.YOUTUBE_HANDLE }}
