@@ -95,7 +95,10 @@ async function youtube(today) {
 }
 
 async function main() {
-  if (!SUPABASE_URL || !SERVICE_KEY) throw new Error("Add SUPABASE_URL (variable) and SUPABASE_SERVICE_ROLE_KEY (secret) first.");
+  if (!SUPABASE_URL || !SERVICE_KEY) {
+    console.log("::notice::Not set up yet: add SUPABASE_URL (variable) and SUPABASE_SERVICE_ROLE_KEY (secret). Skipping.");
+    return;
+  }
   const today = dayIn(TZ);
   let failed = 0;
   for (const [name, job] of [["Website", website], ["Newsletter", newsletter], ["YouTube", youtube]]) {
