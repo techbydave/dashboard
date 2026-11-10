@@ -62,3 +62,12 @@ alter table public.ideas enable row level security;
 drop policy if exists "admin ideas" on public.ideas;
 create policy "admin ideas" on public.ideas
   for all using (public.is_admin()) with check (public.is_admin());
+
+-- ---------------------------------------------------------------------------
+-- Table permissions (row-level security above still limits everything to the admin)
+-- ---------------------------------------------------------------------------
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.metrics, public.ideas to authenticated;
+grant select on public.admins to authenticated;
+grant execute on function public.is_admin() to anon, authenticated;
+grant all on public.metrics, public.ideas, public.admins to service_role;
