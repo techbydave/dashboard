@@ -33,12 +33,14 @@ jobs:
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
         run: |
           mkdir -p _site
-          cp -r index.html robots.txt assets _site/
-          node -e '
-            const cfg = { supabaseUrl: process.env.SUPABASE_URL || "", supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "" };
-            require("fs").writeFileSync("_site/config.js", "window.DASH_CONFIG = " + JSON.stringify(cfg, null, 2) + ";\n");
-          '
-          if [ -z "$SUPABASE_URL" ]; then echo "::notice::SUPABASE_URL isn't set yet, so the dashboard runs with sample data."; fi
+          cp -r index.html robots.txt config.js assets _site/
+          # Repository variables, when set, override the committed config.js
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+            node -e '
+              const cfg = { supabaseUrl: process.env.SUPABASE_URL, supabaseAnonKey: process.env.SUPABASE_ANON_KEY };
+              require("fs").writeFileSync("_site/config.js", "window.DASH_CONFIG = " + JSON.stringify(cfg, null, 2) + ";\n");
+            '
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

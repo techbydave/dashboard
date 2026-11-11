@@ -19,7 +19,7 @@ Your private mission control at **dashboard.techbydave.com**: website traffic, f
 | TikTok, Instagram, X, Pinterest followers | Your weekly check-in | Free |
 | Drafts and posts | Read straight from your public blog repo | Free |
 
-Until Supabase is connected, the site runs on **sample data** (clearly labelled), so you can click around first.
+The dashboard is connected to the Supabase project **techbydave-dashboard** (its public address and key are in `config.js`).
 
 ## Setup (about 25 minutes, one time)
 
@@ -45,8 +45,6 @@ Even if someone found a way to make an account, the database only shows data to 
 
 | Name | Value |
 | --- | --- |
-| `SUPABASE_URL` | Supabase → Project Settings → API → Project URL |
-| `SUPABASE_ANON_KEY` | Supabase → Project Settings → API → `anon` `public` key |
 | `CF_ACCOUNT_ID` | Your Cloudflare Account ID |
 | `SITE_HOST` | `techbydave.com` (optional; this is the default) |
 | `YOUTUBE_HANDLE` | `techby_dave` (optional; this is the default) |
