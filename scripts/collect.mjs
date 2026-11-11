@@ -5,7 +5,10 @@
 //   Website     Cloudflare Web Analytics  -> CF_API_TOKEN (secret), CF_ACCOUNT_ID (variable), SITE_HOST (variable, default techbydave.com)
 //   Newsletter  Kit                       -> KIT_API_KEY (secret)
 //   YouTube     YouTube Data API          -> YOUTUBE_API_KEY (secret), YOUTUBE_HANDLE (variable, default techby_dave)
+//   Search      Google Search Console     -> GSC_SERVICE_ACCOUNT (secret: the whole service-account JSON), GSC_SITE (variable, optional)
 //   Always      SUPABASE_URL (variable), SUPABASE_SERVICE_ROLE_KEY (secret)
+
+import { createSign } from "node:crypto";
 
 const env = process.env;
 const SUPABASE_URL = (env.SUPABASE_URL || "").replace(/\/$/, "");
@@ -94,6 +97,66 @@ async function youtube(today) {
   return `${s.subscriberCount} subscribers`;
 }
 
+// ---- Google Search Console: daily totals + top searches and pages ----
+const b64url = (b) => Buffer.from(b).toString("base64").replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+
+async function googleToken(sa, scope) {
+  const now = Math.floor(Date.now() / 1000);
+  const head = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const claims = b64url(JSON.stringify({ iss: sa.client_email, scope, aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600 }));
+  const sig = b64url(createSign("RSA-SHA256").update(`${head}.${claims}`).sign(sa.private_key));
+  const data = await getJSON("https://oauth2.googleapis.com/token", {
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: `${head}.${claims}.${sig}` }),
+  });
+  return data.access_token;
+}
+
+export function searchDailyRows(rows) {
+  return (rows || []).flatMap((r) => [
+    { day: r.keys[0], source: "search", metric: "clicks", value: r.clicks },
+    { day: r.keys[0], source: "search", metric: "impressions", value: r.impressions },
+    { day: r.keys[0], source: "search", metric: "position", value: Math.round(r.position * 100) / 100 },
+  ]);
+}
+
+export function searchTopRows(kind, rows, periodEnd) {
+  return (rows || []).map((r) => ({
+    kind, item: String(r.keys[0]).slice(0, 300), clicks: r.clicks, impressions: r.impressions,
+    ctr: Math.round(r.ctr * 10000) / 10000, position: Math.round(r.position * 10) / 10, period_end: periodEnd,
+  }));
+}
+
+async function search(today) {
+  if (!env.GSC_SERVICE_ACCOUNT) return "skipped (add GSC_SERVICE_ACCOUNT)";
+  let sa;
+  try { sa = JSON.parse(env.GSC_SERVICE_ACCOUNT); } catch { throw new Error("GSC_SERVICE_ACCOUNT isn't valid JSON. Paste the whole downloaded key file."); }
+  const token = await googleToken(sa, "https://www.googleapis.com/auth/webmasters.readonly");
+  const sites = env.GSC_SITE ? [env.GSC_SITE] : [`sc-domain:${env.SITE_HOST || "techbydave.com"}`, `https://${env.SITE_HOST || "techbydave.com"}/`];
+  const query = (site, body) => getJSON(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(site)}/searchAnalytics/query`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const end = today, start = addDaysISO(today, -16), topStart = addDaysISO(today, -30);
+  let site = null, daily = null, lastErr = null;
+  for (const s of sites) {
+    try { daily = await query(s, { startDate: start, endDate: end, dimensions: ["date"], rowLimit: 100 }); site = s; break; }
+    catch (err) { lastErr = err; }
+  }
+  if (!site) throw new Error(`Search Console refused access (${lastErr?.message?.slice(0, 120)}). Add ${sa.client_email} as a user on your Search Console property.`);
+  const [queries, pages] = await Promise.all([
+    query(site, { startDate: topStart, endDate: end, dimensions: ["query"], rowLimit: 25 }),
+    query(site, { startDate: topStart, endDate: end, dimensions: ["page"], rowLimit: 25 }),
+  ]);
+  await save(searchDailyRows(daily.rows));
+  const top = [...searchTopRows("query", queries.rows, end), ...searchTopRows("page", pages.rows, end)];
+  const headers = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json" };
+  await getJSON(`${SUPABASE_URL}/rest/v1/search_top?kind=in.(query,page)`, { method: "DELETE", headers });
+  if (top.length) await getJSON(`${SUPABASE_URL}/rest/v1/search_top`, { method: "POST", headers: { ...headers, Prefer: "return=minimal" }, body: JSON.stringify(top) });
+  return `${daily.rows?.length || 0} day(s), ${queries.rows?.length || 0} searches, ${pages.rows?.length || 0} pages (${site})`;
+}
+
+function addDaysISO(day, n) { const d = new Date(day + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+
 async function main() {
   if (!SUPABASE_URL || !SERVICE_KEY) {
     console.log("::notice::Not set up yet: add SUPABASE_URL (variable) and SUPABASE_SERVICE_ROLE_KEY (secret). Skipping.");
@@ -101,7 +164,7 @@ async function main() {
   }
   const today = dayIn(TZ);
   let failed = 0;
-  for (const [name, job] of [["Website", website], ["Newsletter", newsletter], ["YouTube", youtube]]) {
+  for (const [name, job] of [["Website", website], ["Newsletter", newsletter], ["YouTube", youtube], ["Search", search]]) {
     try { console.log(`${name}: ${await job(today)}`); }
     catch (err) { failed++; console.error(`${name}: failed - ${err.message}`); }
   }

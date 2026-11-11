@@ -5,7 +5,7 @@
 import { series, dailyFilled, growth, periodCompare, lastEntryDay, compact, signed, monthGrid, addDays, daysBetween, todayIn, sum } from "./metrics.js";
 import { areaChart, sparkline, tableHTML } from "./charts.js";
 import { loadContent } from "./content.js";
-import { demoRows, demoIdeas, demoContent } from "./demo.js";
+import { demoRows, demoIdeas, demoContent, demoSearchTop } from "./demo.js";
 
 const TZ = "America/Toronto";
 const cfg = window.DASH_CONFIG || {};
@@ -50,6 +50,7 @@ class DemoStore {
   async ideas() { const v = lsGet("tbd-demo-ideas", null); if (v) return v; const s = demoIdeas(this.today); lsSet("tbd-demo-ideas", s); return s; }
   async saveIdea(idea) { const all = await this.ideas(); const i = all.findIndex((x) => x.id === idea.id); if (i >= 0) all[i] = idea; else all.push(idea); lsSet("tbd-demo-ideas", all); return idea; }
   async deleteIdea(id) { lsSet("tbd-demo-ideas", (await this.ideas()).filter((x) => x.id !== id)); }
+  async searchTop() { return demoSearchTop(this.today); }
 }
 
 class LiveStore {
@@ -78,10 +79,15 @@ class LiveStore {
   async ideas() { const { data, error } = await this.db.from("ideas").select("*").order("created_at"); if (error) throw error; return data; }
   async saveIdea(idea) { const { data, error } = await this.db.from("ideas").upsert(idea).select().single(); if (error) throw error; return data; }
   async deleteIdea(id) { const { error } = await this.db.from("ideas").delete().eq("id", id); if (error) throw error; }
+  async searchTop() {
+    const { data, error } = await this.db.from("search_top").select("*").order("clicks", { ascending: false }).order("impressions", { ascending: false });
+    if (error) { console.warn("search_top:", error.message); return []; } // table not created yet
+    return data;
+  }
 }
 
 let store = null;
-const state = { view: "overview", days: lsGet("tbd-range", 30), rows: [], ideas: [], content: [], contentNote: "", cal: null, user: null };
+const state = { view: "overview", days: lsGet("tbd-range", 30), rows: [], ideas: [], content: [], contentNote: "", searchTop: [], cal: null, user: null };
 
 // ---------------------------------------------------------------------------
 // Small UI helpers
@@ -181,6 +187,81 @@ function renderOverview() {
         : `<div class="plat-empty">${p.manual ? `<button class="btn ghost sm" data-open="checkin">Add your first numbers</button>` : `<span class="muted small">Connects automatically once its key is added (see the README).</span>`}</div>`}
     </article>`;
   }).join("");
+}
+
+// ---------------------------------------------------------------------------
+// Google Search (Search Console)
+// ---------------------------------------------------------------------------
+function renderSearch() {
+  const { from, to } = range();
+  const rows = state.rows;
+  const has = rows.some((r) => r.source === "search");
+  $("#search-empty").hidden = has;
+  $("#search-body").hidden = !has;
+  if (!has) {
+    $("#search-empty").innerHTML = `<article class="panel search-empty">
+      <h2>Connect Google Search Console</h2>
+      <p class="muted">See which Google searches bring people to techbydave.com, how often your posts show up, and where they rank. It takes about 10 minutes, once.</p>
+      <ol>
+        <li>In Google Cloud, create a service account and download its JSON key.</li>
+        <li>Turn on the <b>Google Search Console API</b> for that project.</li>
+        <li>In Search Console → Settings → Users and permissions, add the service account's email (Restricted is enough).</li>
+        <li>In the dashboard repo on GitHub, add the whole JSON file as the secret <code>GSC_SERVICE_ACCOUNT</code>.</li>
+      </ol>
+      <p class="muted small">The full steps are in the README. Numbers appear after the next automatic update (about 6am and 6pm).</p>
+    </article>`;
+    return;
+  }
+  // Google is ~2 days behind; compare like with like by shifting the window to the last day with data.
+  const last = series(rows, "search", "clicks").at(-1)?.day || to;
+  const end = last < to ? last : to, start = addDays(end, -(state.days - 1));
+  const clicks = periodCompare(rows, "search", "clicks", start, end);
+  const impr = periodCompare(rows, "search", "impressions", start, end);
+  const pStart = addDays(start, -state.days), pEnd = addDays(start, -1);
+  const ctr = impr.cur ? clicks.cur / impr.cur : null;
+  const ctrPrev = impr.prev ? clicks.prev / impr.prev : null;
+  const avgPos = (a, b) => { // impression-weighted average position
+    const pos = series(rows, "search", "position", a, b), im = new Map(series(rows, "search", "impressions", a, b).map((d) => [d.day, d.value]));
+    let w = 0, t = 0; for (const p of pos) { const k = im.get(p.day) || 0; w += k; t += p.value * k; }
+    return w ? t / w : null;
+  };
+  const pos = avgPos(start, end), posPrev = avgPos(pStart, pEnd);
+  const clicksDaily = dailyFilled(rows, "search", "clicks", start, end);
+  const imprDaily = dailyFilled(rows, "search", "impressions", start, end);
+  const posChange = pos != null && posPrev != null ? posPrev - pos : null; // positive = moved up the results
+  const tiles = [
+    { label: "Clicks", value: compact(clicks.cur), delta: deltaChip(clicks.pct, { pct: true }), sub: `vs previous ${state.days} days`, spark: clicksDaily },
+    { label: "Impressions", value: compact(impr.cur), delta: deltaChip(impr.pct, { pct: true }), sub: "times you appeared in results", spark: imprDaily },
+    { label: "Click-through rate", value: ctr != null ? (ctr * 100).toFixed(1) + "%" : "–", delta: deltaChip(ctr != null && ctrPrev != null ? Math.round((ctr - ctrPrev) * 1000) / 10 : null, { suffix: " pts" }), sub: "of people who saw you, clicked", spark: [] },
+    { label: "Average position", value: pos != null ? pos.toFixed(1) : "–", delta: deltaChip(posChange != null ? Math.round(posChange * 10) / 10 : null, { suffix: posChange != null ? " spots" : "" }), sub: "lower is better · 1 is the top result", spark: [] },
+  ];
+  $("#search-kpis").innerHTML = tiles.map((t, i) => `
+    <article class="kpi" style="--i:${i}">
+      <div class="kpi-top"><span class="kpi-label">${t.label}</span>${t.delta}</div>
+      <div class="kpi-num">${t.value}</div>
+      <div class="kpi-foot"><span class="muted small">${t.sub}</span>${t.spark.length > 1 ? sparkline(t.spark, { w: 104, h: 30 }) : ""}</div>
+    </article>`).join("");
+  $("#clicks-total").textContent = compact(clicks.cur);
+  $("#impr-total").textContent = compact(impr.cur);
+  areaChart($("#clicks-chart"), clicksDaily, { label: "Clicks from Google per day" });
+  areaChart($("#impr-chart"), imprDaily, { label: "Google impressions per day" });
+  $("#clicks-table").innerHTML = tableHTML(clicksDaily, "Clicks");
+  $("#impr-table").innerHTML = tableHTML(imprDaily, "Impressions");
+
+  const top = state.searchTop;
+  const period = top[0]?.period_end ? `Last 30 days to ${fmt(top[0].period_end, { month: "short", day: "numeric" })}` : "Last 30 days";
+  $("#queries-sub").textContent = period; $("#pages-sub").textContent = period;
+  const label = (kind, item) => kind === "page"
+    ? `<a href="${esc(item)}" target="_blank" rel="noopener" title="${esc(item)}">${esc(item.replace(/^https?:\/\/[^/]+/, "") || "/")}</a>`
+    : `<span title="${esc(item)}">${esc(item)}</span>`;
+  const table = (kind, head) => {
+    const list = top.filter((t) => t.kind === kind);
+    if (!list.length) return `<p class="muted small">Nothing yet. Google needs a few searches before it lists them.</p>`;
+    return `<table class="data-table rank-table"><thead><tr><th>${head}</th><th>Clicks</th><th>Shown</th><th>Position</th></tr></thead><tbody>${
+      list.map((t) => `<tr><td>${label(kind, t.item)}</td><td>${compact(Number(t.clicks))}</td><td>${compact(Number(t.impressions))}</td><td>${Number(t.position).toFixed(1)}</td></tr>`).join("")}</tbody></table>`;
+  };
+  $("#top-queries").innerHTML = table("query", "Search");
+  $("#top-pages").innerHTML = table("page", "Page");
 }
 
 function renderUpNext(today) {
@@ -416,26 +497,27 @@ $("#cal-today").onclick = () => { state.cal = null; renderCalendar(); };
 $("#range").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-days]"); if (!b) return;
   state.days = Number(b.dataset.days); lsSet("tbd-range", state.days);
-  syncRange(); renderOverview();
+  syncRange(); state.view === "search" ? renderSearch() : renderOverview();
 });
 function syncRange() { for (const b of $("#range").children) b.setAttribute("aria-checked", String(Number(b.dataset.days) === state.days)); }
 
-const TITLES = { overview: null, calendar: "Content calendar", ideas: "Ideas board" };
+const TITLES = { overview: null, search: "Google Search", calendar: "Content calendar", ideas: "Ideas board" };
 function route() {
   const v = (location.hash || "#overview").slice(1);
   state.view = TITLES.hasOwnProperty(v) ? v : "overview";
   for (const k of Object.keys(TITLES)) $("#view-" + k).hidden = k !== state.view;
   document.querySelectorAll("[data-view]").forEach((a) => a.setAttribute("aria-current", a.dataset.view === state.view ? "page" : "false"));
   $("#page-title").textContent = TITLES[state.view] || greeting();
-  $("#range").hidden = state.view !== "overview";
+  $("#range").hidden = !["overview", "search"].includes(state.view);
   renderAll();
 }
 window.addEventListener("hashchange", route);
-let resizeT; window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => state.view === "overview" && renderOverview(), 150); });
+let resizeT; window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (state.view === "overview") renderOverview(); if (state.view === "search") renderSearch(); }, 150); });
 
 function renderAll() {
   if ($("#app").hidden) return;
   if (state.view === "overview") renderOverview();
+  if (state.view === "search") renderSearch();
   if (state.view === "calendar") renderCalendar();
   if (state.view === "ideas") renderBoard();
 }
@@ -540,8 +622,8 @@ async function enter() {
   if (!(await store.isAdmin())) { await store.signOut(); return showLogin("This account doesn't have access to the dashboard."); }
   $("#boot").hidden = false; $("#boot").textContent = "Loading your numbers…";
   const from = addDays(todayIn(TZ), -200);
-  const [rows, ideas] = await Promise.all([store.metrics(from), store.ideas()]);
-  state.rows = rows; state.ideas = ideas;
+  const [rows, ideas, searchTop] = await Promise.all([store.metrics(from), store.ideas(), store.searchTop()]);
+  state.rows = rows; state.ideas = ideas; state.searchTop = searchTop;
   $("#who-email").textContent = state.user.email || "";
   $("#demo-note").hidden = !store.demo;
   $("#today-label").textContent = new Date().toLocaleDateString("en-CA", { timeZone: TZ, weekday: "long", month: "long", day: "numeric" });

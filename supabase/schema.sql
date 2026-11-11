@@ -64,10 +64,29 @@ create policy "admin ideas" on public.ideas
   for all using (public.is_admin()) with check (public.is_admin());
 
 -- ---------------------------------------------------------------------------
+-- Google Search Console: top searches and pages for the last ~30 days
+-- (daily clicks / impressions / position go in the metrics table as source 'search')
+-- ---------------------------------------------------------------------------
+create table if not exists public.search_top (
+  kind        text not null check (kind in ('query', 'page')),
+  item        text not null,
+  clicks      numeric not null default 0,
+  impressions numeric not null default 0,
+  ctr         numeric not null default 0,
+  position    numeric not null default 0,
+  period_end  date not null,
+  primary key (kind, item)
+);
+alter table public.search_top enable row level security;
+
+drop policy if exists "admin search" on public.search_top;
+create policy "admin search" on public.search_top for select using (public.is_admin());
+
+-- ---------------------------------------------------------------------------
 -- Table permissions (row-level security above still limits everything to the admin)
 -- ---------------------------------------------------------------------------
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on public.metrics, public.ideas to authenticated;
-grant select on public.admins to authenticated;
+grant select on public.admins, public.search_top to authenticated;
 grant execute on function public.is_admin() to anon, authenticated;
-grant all on public.metrics, public.ideas, public.admins to service_role;
+grant all on public.metrics, public.ideas, public.admins, public.search_top to service_role;

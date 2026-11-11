@@ -155,6 +155,16 @@ label { display: block; font-weight: 600; font-size: .88rem; margin: 14px 0 6px;
 
 /* ---- Traffic chart ---- */
 .row-2 { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 14px; }
+.row-even { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+.chart-panel .chart-host { min-height: 240px; }
+.scroll-table { max-height: 420px; overflow: auto; }
+.lag-note { margin: -4px 0 12px; }
+.rank-table td:first-child { max-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-table td:first-child a { color: inherit; text-decoration: none; }
+.rank-table td:first-child a:hover { text-decoration: underline; }
+.rank-table th:not(:first-child), .rank-table td:not(:first-child) { text-align: right; white-space: nowrap; padding-left: 12px; }
+.search-empty { max-width: 640px; }
+.search-empty ol { padding-left: 20px; line-height: 1.6; }
 .big-num { font: 700 1.8rem var(--display); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
 .traffic { display: flex; flex-direction: column; }
 .chart-host { position: relative; flex: 1; min-height: 260px; }
@@ -297,7 +307,7 @@ dialog::backdrop { background: rgba(4,6,14,.6); backdrop-filter: blur(3px); }
 
 @media (max-width: 1100px) {
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .row-2, .cal-layout { grid-template-columns: minmax(0, 1fr); }
+  .row-2, .row-even, .cal-layout { grid-template-columns: minmax(0, 1fr); }
   .platforms { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -306,7 +316,7 @@ dialog::backdrop { background: rgba(4,6,14,.6); backdrop-filter: blur(3px); }
   .side { display: none; }
   .main { padding: 18px max(16px, env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
   .top-checkin { display: inline-flex; }
-  .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  .tabbar { display: grid; grid-template-columns: repeat(6, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
     padding: 8px max(8px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
     background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(12px); border-top: 1px solid var(--line); }
   .tabbar a, .tabbar button { display: grid; justify-items: center; gap: 2px; font-size: .68rem; font-weight: 600; color: var(--mute); background: none; border: 0; padding: 4px 0; cursor: pointer; }
@@ -328,6 +338,8 @@ dialog::backdrop { background: rgba(4,6,14,.6); backdrop-filter: blur(3px); }
   .kpi .spark { display: none; }
   .kpi-num { font-size: 1.45rem; }
   .row-fields { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .rank-table td:first-child { white-space: normal; overflow-wrap: anywhere; }
+  .rank-table th:not(:first-child), .rank-table td:not(:first-child) { padding-left: 8px; }
   .ci { grid-template-columns: auto minmax(0, 1fr) 110px; }
   .top { align-items: flex-start; }
   .chart-host { min-height: 220px; }

@@ -16,6 +16,7 @@ Your private mission control at **dashboard.techbydave.com**: website traffic, f
 | Website visits and page views | Cloudflare Web Analytics (already on your site), collected twice a day | Free |
 | Newsletter subscribers | Kit, collected twice a day | Free |
 | YouTube subscribers, views, videos | YouTube Data API, collected twice a day | Free |
+| Google searches: clicks, impressions, position, top searches and pages | Google Search Console API, collected twice a day (Google runs 2 to 3 days behind) | Free |
 | TikTok, Instagram, X, Pinterest followers | Your weekly check-in | Free |
 | Drafts and posts | Read straight from your public blog repo | Free |
 
@@ -37,6 +38,12 @@ Even if someone found a way to make an account, the database only shows data to 
 - **Cloudflare:** go to [dash.cloudflare.com](https://dash.cloudflare.com) → **My Profile → API Tokens → Create Token → Custom token**. Give it the permission **Account → Account Analytics → Read** and create it. Your **Account ID** is on your account's home page (right-hand side).
 - **Kit:** use the same V4 API key as your blog's newsletter digest.
 - **YouTube:** go to [console.cloud.google.com](https://console.cloud.google.com), create a project, enable **YouTube Data API v3**, then **Credentials → Create credentials → API key**. Restrict the key to the YouTube Data API.
+- **Google Search Console** (same Google Cloud project is fine):
+  1. **APIs & Services → Library**, search **Google Search Console API**, click **Enable**.
+  2. **IAM & Admin → Service Accounts → Create service account.** Name it `dashboard`, skip the optional role steps, click **Done**.
+  3. Open the new service account → **Keys → Add key → Create new key → JSON**. A `.json` file downloads. Treat it like a password.
+  4. Copy the service account's email (it looks like `dashboard@your-project.iam.gserviceaccount.com`).
+  5. In [Search Console](https://search.google.com/search-console), pick the techbydave.com property → **Settings → Users and permissions → Add user**, paste that email, permission **Restricted**, **Add**.
 
 ### 3. Add them to this repo
 **Settings → Secrets and variables → Actions**
@@ -48,6 +55,7 @@ Even if someone found a way to make an account, the database only shows data to 
 | `CF_ACCOUNT_ID` | Your Cloudflare Account ID |
 | `SITE_HOST` | `techbydave.com` (optional; this is the default) |
 | `YOUTUBE_HANDLE` | `techby_dave` (optional; this is the default) |
+| `GSC_SITE` | Optional. Only if your property isn't `sc-domain:techbydave.com` or `https://techbydave.com/` (both are tried automatically) |
 
 **Secrets** tab (keep private):
 
@@ -57,6 +65,7 @@ Even if someone found a way to make an account, the database only shows data to 
 | `CF_API_TOKEN` | The Cloudflare token from step 2 |
 | `KIT_API_KEY` | Your Kit V4 API key |
 | `YOUTUBE_API_KEY` | The YouTube API key from step 2 |
+| `GSC_SERVICE_ACCOUNT` | Open the downloaded `.json` file in a text editor and paste **all** of it |
 
 Any key you leave out is just skipped, so you can add them one at a time.
 

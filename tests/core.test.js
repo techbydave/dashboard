@@ -66,3 +66,11 @@ test("Cloudflare groups become visit and pageview rows", () => {
     { day: "2026-11-09", source: "website", metric: "visits", value: 80 },
   ]);
 });
+
+import { searchDailyRows, searchTopRows } from "../scripts/collect.mjs";
+test("Search Console rows", () => {
+  const d = searchDailyRows([{ keys: ["2026-11-07"], clicks: 12, impressions: 340, ctr: 0.035, position: 14.234 }]);
+  assert.deepEqual(d.map((r) => [r.metric, r.value]), [["clicks", 12], ["impressions", 340], ["position", 14.23]]);
+  const t = searchTopRows("query", [{ keys: ["pixel 11 pro fold price"], clicks: 5, impressions: 90, ctr: 0.05555, position: 8.46 }], "2026-11-10");
+  assert.deepEqual(t[0], { kind: "query", item: "pixel 11 pro fold price", clicks: 5, impressions: 90, ctr: 0.0556, position: 8.5, period_end: "2026-11-10" });
+});

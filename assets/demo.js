@@ -25,7 +25,26 @@ export function demoRows(today) {
       rows.push({ day: d, source: src, metric: "followers", value: Math.round(b + (119 - k * 7) * g + r() * 6) });
     }
   }
+  // Google Search Console (Google reports about 2 days late)
+  for (let k = 119; k >= 2; k--) {
+    const day = addDays(today, -k), j = 119 - k;
+    const impressions = Math.round((180 + j * 9) * (0.85 + r() * 0.3));
+    const clicks = Math.round(impressions * (0.03 + r() * 0.015));
+    rows.push({ day, source: "search", metric: "impressions", value: impressions });
+    rows.push({ day, source: "search", metric: "clicks", value: clicks });
+    rows.push({ day, source: "search", metric: "position", value: Math.round((24 - j * 0.09 + r() * 3) * 100) / 100 });
+  }
   return rows;
+}
+
+export function demoSearchTop(today) {
+  const q = [["pixel 11 pro fold price", 41, 820, 6.2], ["airpods pro 3 black friday", 33, 1210, 8.9], ["google smart glasses release date", 27, 940, 7.4],
+    ["airtag 4 pack deal", 22, 510, 5.1], ["quest 2 end of support", 18, 690, 9.8], ["motorola signature 27", 12, 455, 11.3],
+    ["is pixel 11 pro fold worth it", 9, 210, 6.7], ["coros pace 4 review", 7, 330, 14.2], ["cheap black friday gadgets 2026", 6, 610, 18.5], ["techbydave", 5, 14, 1.0]];
+  const p = [["/posts/pixel-11-pro-fold.html", 58, 1430, 7.1], ["/posts/airpods-pro-3-deal.html", 39, 1650, 9.4], ["/posts/google-smart-glasses.html", 31, 1120, 7.9],
+    ["/", 24, 380, 4.6], ["/posts/airtag-4-pack-deal.html", 22, 560, 5.3], ["/posts/quest-2-updates-end.html", 19, 760, 10.2], ["/about.html", 4, 60, 3.2]];
+  const mk = (kind) => ([item, clicks, impressions, position]) => ({ kind, item: kind === "page" ? "https://techbydave.com" + item : item, clicks, impressions, ctr: clicks / impressions, position, period_end: addDays(today, -2) });
+  return [...q.map(mk("query")), ...p.map(mk("page"))];
 }
 
 export function demoIdeas(today) {
