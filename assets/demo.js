@@ -18,7 +18,7 @@ export function demoRows(today) {
     rows.push({ day: d, source: "youtube", metric: "followers", value: Math.round(268 + i * 1.3 + r() * 3) });
   }
   // weekly check-ins for the apps without free APIs
-  const manual = { tiktok: [1180, 5.6], instagram: [780, 1.6], x: [236, 0.4], pinterest: [372, 1.2] };
+  const manual = { tiktok: [1180, 5.6], instagram: [780, 1.6], pinterest: [372, 1.2] };
   for (let k = 0; k * 7 <= 119; k++) {
     const d = addDays(today, -3 - k * 7);
     for (const [src, [b, g]] of Object.entries(manual)) {

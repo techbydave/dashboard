@@ -7,7 +7,7 @@ Your private mission control at **dashboard.techbydave.com**: website traffic, f
 | **Overview** | Total audience, website visits, newsletter subscribers and posts published, each with change over 7, 30 or 90 days. A website-visits chart (hover for each day, or open the table view). A card per platform. "Up next": what's due soon and which drafts still need your take. |
 | **Calendar** | A month view of published posts (✓), drafts (✎) and ideas (✦), pulled live from the `techbydave/techbydave` repo. Drag an unscheduled idea onto a day to schedule it. Tap a day to see everything on it, or turn any post into a Short idea. |
 | **Ideas** | A board with Ideas → Planned → Making it → Posted. Drag cards between columns. |
-| **Weekly check-in** | A 30-second form for the apps without a free API (TikTok, Instagram, X, Pinterest). |
+| **Weekly check-in** | A 30-second form for the apps without a free API (TikTok, Instagram, Pinterest). |
 
 ## Where the numbers come from
 
@@ -17,7 +17,7 @@ Your private mission control at **dashboard.techbydave.com**: website traffic, f
 | Newsletter subscribers | Kit, collected twice a day | Free |
 | YouTube subscribers, views, videos | YouTube Data API, collected twice a day | Free |
 | Google searches: clicks, impressions, position, top searches and pages | Google Search Console API, collected twice a day (Google runs 2 to 3 days behind) | Free |
-| TikTok, Instagram, X, Pinterest followers | Your weekly check-in | Free |
+| TikTok, Instagram, Pinterest followers | Your weekly check-in | Free |
 | Drafts and posts | Read straight from your public blog repo | Free |
 
 The dashboard is connected to the Supabase project **techbydave-dashboard** (its public address and key are in `config.js`).

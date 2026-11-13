@@ -22,7 +22,6 @@ const PLATFORMS = [
   { id: "tiktok", name: "TikTok", mono: "TT", manual: true, metric: "followers", unit: "followers" },
   { id: "instagram", name: "Instagram", mono: "IG", manual: true, metric: "followers", unit: "followers" },
   { id: "youtube", name: "YouTube", mono: "YT", manual: false, metric: "followers", unit: "subscribers" },
-  { id: "x", name: "X", mono: "X", manual: true, metric: "followers", unit: "followers" },
   { id: "pinterest", name: "Pinterest", mono: "PI", manual: true, metric: "followers", unit: "followers" },
   { id: "newsletter", name: "Newsletter", mono: "NL", manual: false, metric: "subscribers", unit: "subscribers" },
 ];
@@ -281,7 +280,7 @@ function renderBanner(today) {
   const last = lastEntryDay(state.rows, PLATFORMS.filter((p) => p.manual).map((p) => p.id));
   const age = last ? daysBetween(last, today) : null;
   $("#banner").innerHTML = age == null || age >= 7
-    ? `<div class="banner"><div><b>Weekly check-in due.</b> <span>${age == null ? "Add your TikTok, Instagram, X and Pinterest numbers to start tracking them." : `Last one was ${age} days ago.`}</span></div><button class="btn primary sm" data-open="checkin">Do it now</button></div>`
+    ? `<div class="banner"><div><b>Weekly check-in due.</b> <span>${age == null ? "Add your TikTok, Instagram and Pinterest numbers to start tracking them." : `Last one was ${age} days ago.`}</span></div><button class="btn primary sm" data-open="checkin">Do it now</button></div>`
     : "";
 }
 

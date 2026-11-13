@@ -27,7 +27,7 @@ create policy "admins read self" on public.admins for select using (public.is_ad
 --   website    visits, pageviews            (collected daily from Cloudflare)
 --   newsletter subscribers                  (collected daily from Kit)
 --   youtube    subscribers, views, videos   (collected daily from YouTube)
---   tiktok / instagram / x / pinterest  followers, views  (weekly check-in in the dashboard)
+--   tiktok / instagram / pinterest  followers, views  (weekly check-in in the dashboard)
 -- ---------------------------------------------------------------------------
 create table if not exists public.metrics (
   day     date    not null,
