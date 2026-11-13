@@ -349,3 +349,16 @@ dialog::backdrop { background: rgba(4,6,14,.6); backdrop-filter: blur(3px); }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
 @keyframes pop { from { opacity: 0; transform: translateY(12px) scale(.98); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* Brand logo tiles */
+.mono.logo { border: 0; color: #fff; }
+.mono.logo svg { width: 22px; height: 22px; display: block; }
+.logo-tiktok { background: #010101; box-shadow: inset 0 0 0 1px rgba(255,255,255,.14), -1.5px -1px 0 0 #25f4ee inset, 1.5px 1px 0 0 #fe2c55 inset; }
+.logo-instagram { background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285aeb 90%); }
+.logo-youtube { background: #ff0033; }
+.mono.logo.logo-youtube svg { width: 24px; height: 24px; }
+.logo-x { background: #000; box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
+.mono.logo.logo-x svg { width: 18px; height: 18px; }
+.mono.logo.logo-pinterest { background: #fff; color: #e60023; }
+.mono.logo.logo-pinterest svg { width: 28px; height: 28px; }
+.logo-newsletter { background: linear-gradient(135deg, #1b6fd1, #7fd6ff); }

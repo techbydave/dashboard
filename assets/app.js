@@ -6,6 +6,7 @@ import { series, dailyFilled, growth, periodCompare, lastEntryDay, compact, sign
 import { areaChart, sparkline, tableHTML } from "./charts.js";
 import { loadContent } from "./content.js";
 import { demoRows, demoIdeas, demoContent, demoSearchTop } from "./demo.js";
+import { logoTile } from "./logos.js";
 
 const TZ = "America/Toronto";
 const cfg = window.DASH_CONFIG || {};
@@ -180,7 +181,7 @@ function renderOverview() {
     const last = pts[pts.length - 1];
     const how = p.manual ? "weekly check-in" : "automatic";
     return `<article class="plat" style="--i:${i}">
-      <header><span class="mono" aria-hidden="true">${p.mono}</span><div><h3>${p.name}</h3><span class="muted small">${how}</span></div>${g.now != null ? deltaChip(g.change) : ""}</header>
+      <header>${logoTile(p)}<div><h3>${p.name}</h3><span class="muted small">${how}</span></div>${g.now != null ? deltaChip(g.change) : ""}</header>
       ${g.now != null
         ? `<div class="plat-num">${compact(g.now)}<span>${p.unit}</span></div>${sparkline(inRange, { w: 220, h: 44 })}
            <p class="muted small">Updated ${relDay(last.day, to).toLowerCase() === "today" ? "today" : fmt(last.day, { month: "short", day: "numeric" })}</p>`
@@ -411,7 +412,7 @@ function openCheckin() {
   $("#checkin-fields").innerHTML = fields.map((p) => {
     const pts = series(state.rows, p.id, p.metric);
     const last = pts[pts.length - 1];
-    return `<label class="ci" for="ci-${p.id}"><span class="mono" aria-hidden="true">${p.mono}</span>
+    return `<label class="ci" for="ci-${p.id}">${logoTile(p)}
       <span class="ci-name">${p.name}<span class="muted small">${last ? `Last: ${compact(last.value)} on ${fmt(last.day, { month: "short", day: "numeric" })}` : "No numbers yet"}</span></span>
       <input id="ci-${p.id}" data-src="${p.id}" data-metric="${p.metric}" type="number" inputmode="numeric" min="0" step="1" placeholder="${p.unit}"></label>`;
   }).join("");
