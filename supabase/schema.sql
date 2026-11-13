@@ -90,3 +90,13 @@ grant select, insert, update, delete on public.metrics, public.ideas to authenti
 grant select on public.admins, public.search_top to authenticated;
 grant execute on function public.is_admin() to anon, authenticated;
 grant all on public.metrics, public.ideas, public.admins, public.search_top to service_role;
+
+-- Private tokens the collector renews by itself (e.g. Instagram, every week).
+-- Row level security is on with no policies, so only the collector's service key can read it.
+create table if not exists public.tokens (
+  name text primary key,
+  value text not null,
+  seed text,
+  updated_at timestamptz not null default now()
+);
+alter table public.tokens enable row level security;

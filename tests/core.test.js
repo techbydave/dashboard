@@ -74,3 +74,15 @@ test("Search Console rows", () => {
   const t = searchTopRows("query", [{ keys: ["pixel 11 pro fold price"], clicks: 5, impressions: 90, ctr: 0.05555, position: 8.46 }], "2026-11-10");
   assert.deepEqual(t[0], { kind: "query", item: "pixel 11 pro fold price", clicks: 5, impressions: 90, ctr: 0.0556, position: 8.5, period_end: "2026-11-10" });
 });
+
+import { pickInstagramToken } from "../scripts/collect.mjs";
+import { createHash } from "node:crypto";
+
+test("Instagram uses the renewed token unless the secret was replaced", () => {
+  const seed = createHash("sha256").update("orig").digest("hex");
+  const stored = { value: "renewed", seed, updated_at: "2026-11-01T00:00:00Z" };
+  assert.equal(pickInstagramToken(stored, "orig").token, "renewed");
+  assert.equal(pickInstagramToken(stored, "brand-new").token, "brand-new");
+  assert.equal(pickInstagramToken(null, "orig").token, "orig");
+  assert.equal(pickInstagramToken(null, "orig").renewedAt, null);
+});

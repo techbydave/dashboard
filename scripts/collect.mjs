@@ -6,9 +6,10 @@
 //   Newsletter  Kit                       -> KIT_API_KEY (secret)
 //   YouTube     YouTube Data API          -> YOUTUBE_API_KEY (secret), YOUTUBE_HANDLE (variable, default techby_dave)
 //   Search      Google Search Console     -> GSC_SERVICE_ACCOUNT (secret: the whole service-account JSON), GSC_SITE (variable, optional)
+//   Instagram   Instagram API (Instagram Login) -> IG_ACCESS_TOKEN (secret). Renewed automatically and kept in the tokens table.
 //   Always      SUPABASE_URL (variable), SUPABASE_SERVICE_ROLE_KEY (secret)
 
-import { createSign } from "node:crypto";
+import { createSign, createHash } from "node:crypto";
 
 const env = process.env;
 const SUPABASE_URL = (env.SUPABASE_URL || "").replace(/\/$/, "");
@@ -155,6 +156,56 @@ async function search(today) {
   return `${daily.rows?.length || 0} day(s), ${queries.rows?.length || 0} searches, ${pages.rows?.length || 0} pages (${site})`;
 }
 
+// ---- Instagram: follower count via the Instagram API with Instagram Login ----
+// Long-lived tokens last 60 days. We renew weekly and keep the newest one in the
+// private `tokens` table, so the GitHub secret only has to be set once. If you
+// paste a new token into the secret later, it takes over (matched by its hash).
+const sha = (s) => createHash("sha256").update(String(s)).digest("hex");
+const RENEW_AFTER_DAYS = 7;
+
+export function pickInstagramToken(stored, envToken) {
+  const seed = sha(envToken);
+  if (stored && stored.seed === seed && stored.value) return { token: stored.value, seed, renewedAt: stored.updated_at };
+  return { token: envToken, seed, renewedAt: null };
+}
+
+async function tokenRow(name) {
+  const headers = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` };
+  try {
+    const rows = await getJSON(`${SUPABASE_URL}/rest/v1/tokens?name=eq.${name}&select=value,seed,updated_at`, { headers });
+    return { ok: true, row: rows?.[0] || null };
+  } catch { return { ok: false, row: null }; }
+}
+
+async function saveTokenRow(name, value, seed) {
+  await getJSON(`${SUPABASE_URL}/rest/v1/tokens`, {
+    method: "POST",
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify([{ name, value, seed, updated_at: new Date().toISOString() }]),
+  });
+}
+
+async function instagram(today) {
+  if (!env.IG_ACCESS_TOKEN) return "skipped (add IG_ACCESS_TOKEN)";
+  const { ok: tableOk, row } = await tokenRow("instagram");
+  let { token, seed, renewedAt } = pickInstagramToken(row, env.IG_ACCESS_TOKEN.trim());
+  let note = "";
+  const age = renewedAt ? (Date.now() - Date.parse(renewedAt)) / 86400000 : Infinity;
+  if (tableOk && age >= RENEW_AFTER_DAYS) {
+    try {
+      const fresh = await getJSON(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(token)}`);
+      if (fresh?.access_token) { token = fresh.access_token; await saveTokenRow("instagram", token, seed); note = ", token renewed"; }
+    } catch (err) { note = `, token not renewed yet (${err.message.slice(0, 80)})`; }
+  } else if (!tableOk) note = ", can't renew the token: run the tokens part of supabase/schema.sql";
+  const me = await getJSON(`https://graph.instagram.com/me?fields=username,followers_count,media_count&access_token=${encodeURIComponent(token)}`);
+  if (typeof me?.followers_count !== "number") throw new Error("Instagram didn't return a follower count. Is the account a Creator or Business account?");
+  await save([
+    { day: today, source: "instagram", metric: "followers", value: me.followers_count },
+    ...(typeof me.media_count === "number" ? [{ day: today, source: "instagram", metric: "posts", value: me.media_count }] : []),
+  ]);
+  return `${me.followers_count} followers (@${me.username})${note}`;
+}
+
 function addDaysISO(day, n) { const d = new Date(day + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 
 async function main() {
@@ -164,7 +215,7 @@ async function main() {
   }
   const today = dayIn(TZ);
   let failed = 0;
-  for (const [name, job] of [["Website", website], ["Newsletter", newsletter], ["YouTube", youtube], ["Search", search]]) {
+  for (const [name, job] of [["Website", website], ["Newsletter", newsletter], ["YouTube", youtube], ["Search", search], ["Instagram", instagram]]) {
     try { console.log(`${name}: ${await job(today)}`); }
     catch (err) { failed++; console.error(`${name}: failed - ${err.message}`); }
   }
