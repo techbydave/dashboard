@@ -12,7 +12,7 @@ const MODELS: Record<string, { provider: "gemini" | "claude"; id: string; fallba
   "claude-sonnet-5-5": { provider: "claude", id: "claude-sonnet-5-5" },
   "claude-opus-5-5": { provider: "claude", id: "claude-opus-5-5" },
 };
-const DEFAULT_MODEL = "gemini-flash";
+const DEFAULT_MODEL = "gemini-flash-lite";
 const MAX_MESSAGES = 40;
 const MAX_CHARS = 120_000;
 
@@ -104,11 +104,35 @@ async function gemini(choice: { id: string; fallback?: string }, system: string,
     contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
     generationConfig: { maxOutputTokens: 4096 },
   });
-  const call = (id: string) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${id}:streamGenerateContent?alt=sse`, {
-    method: "POST", headers: { "x-goog-api-key": key, "Content-Type": "application/json" }, body,
-  });
-  let upstream = await call(choice.id);
-  if (!upstream.ok && choice.fallback && [404, 429, 500, 503].includes(upstream.status)) upstream = await call(choice.fallback);
+  // If a model hasn't started answering within 20s (busy free tier), give up on it and use the fallback.
+  const timeout = (ms: number) => new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), ms));
+  const call = async (id: string, waitMs?: number): Promise<Response> => {
+    const ctl = new AbortController();
+    const go = async () => {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${id}:streamGenerateContent?alt=sse`, {
+        method: "POST", headers: { "x-goog-api-key": key, "Content-Type": "application/json" }, body, signal: ctl.signal,
+      });
+      if (!res.ok || !res.body || !waitMs) return res;
+      // Wait for the first chunk too, so a model that accepts the request but stalls still falls back.
+      const reader = res.body.getReader();
+      const first = await reader.read();
+      const rest = new ReadableStream<Uint8Array>({
+        start(c) { if (first.value) c.enqueue(first.value); if (first.done) c.close(); },
+        async pull(c) { const { value, done } = await reader.read(); if (done) c.close(); else c.enqueue(value); },
+        cancel() { reader.cancel(); },
+      });
+      return new Response(rest, { status: res.status, headers: res.headers });
+    };
+    if (!waitMs) return go();
+    try { return await Promise.race([go(), timeout(waitMs)]); }
+    catch (err) {
+      ctl.abort();
+      if ((err as Error).message === "timeout") return new Response('{"error":{"message":"timed out"}}', { status: 504 });
+      throw err;
+    }
+  };
+  let upstream = await call(choice.id, choice.fallback ? 20_000 : undefined);
+  if (!upstream.ok && choice.fallback && [404, 429, 500, 503, 504].includes(upstream.status)) upstream = await call(choice.fallback);
   if (!upstream.ok || !upstream.body) {
     const text = await upstream.text();
     let msg = text.slice(0, 300);

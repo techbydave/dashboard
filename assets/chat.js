@@ -7,8 +7,8 @@ const MODEL_KEY = "tbd-ai-model";
 const MAX_SAVED = 40;
 
 export const MODELS = [
-  ["gemini-flash", "Gemini Flash", "Free"],
-  ["gemini-flash-lite", "Gemini Flash-Lite", "Free, fastest"],
+  ["gemini-flash-lite", "Gemini Flash-Lite", "Free, fast"],
+  ["gemini-flash", "Gemini Flash", "Free, smarter but slower"],
   ["claude-sonnet-5-5", "Claude Sonnet 5.5", "Paid, needs Anthropic key"],
   ["claude-opus-5-5", "Claude Opus 5.5", "Paid, smartest"],
 ];
