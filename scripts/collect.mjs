@@ -187,6 +187,14 @@ async function saveTokenRow(name, value, seed) {
 
 async function instagram(today) {
   if (!env.IG_ACCESS_TOKEN) return "skipped (add IG_ACCESS_TOKEN)";
+  const igUserId = env.IG_USER_ID || "17841471747675635"; // @techby_dave
+  // Never-expiring system-user tokens (Unified login) are read through graph.facebook.com.
+  const viaFacebook = async (tok) => getJSON(`https://graph.facebook.com/v25.0/${igUserId}?fields=username,followers_count,media_count&access_token=${encodeURIComponent(tok)}`);
+  try {
+    const me = await viaFacebook(env.IG_ACCESS_TOKEN.trim());
+    if (typeof me?.followers_count === "number") return await saveInstagram(today, me, " (never-expiring token)");
+  } catch { /* not a system-user token: fall through to Instagram Login */ }
+
   const { ok: tableOk, row } = await tokenRow("instagram");
   let { token, seed, renewedAt } = pickInstagramToken(row, env.IG_ACCESS_TOKEN.trim());
   let note = "";
@@ -199,6 +207,10 @@ async function instagram(today) {
   } else if (!tableOk) note = ", can't renew the token: run the tokens part of supabase/schema.sql";
   const me = await getJSON(`https://graph.instagram.com/me?fields=username,followers_count,media_count&access_token=${encodeURIComponent(token)}`);
   if (typeof me?.followers_count !== "number") throw new Error("Instagram didn't return a follower count. Is the account a Creator or Business account?");
+  return saveInstagram(today, me, note);
+}
+
+async function saveInstagram(today, me, note) {
   await save([
     { day: today, source: "instagram", metric: "followers", value: me.followers_count },
     ...(typeof me.media_count === "number" ? [{ day: today, source: "instagram", metric: "posts", value: me.media_count }] : []),
