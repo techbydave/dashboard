@@ -2,11 +2,12 @@
 //   Live: config.js has Supabase settings -> email + password sign-in, your real numbers.
 //   Demo: no settings yet (or ?demo) -> sample numbers, clearly labelled.
 
-import { series, dailyFilled, growth, periodCompare, lastEntryDay, compact, signed, monthGrid, addDays, daysBetween, todayIn, sum } from "./metrics.js";
+import { series, dailyFilled, growth, periodCompare, lastEntryDay, compact, signed, monthGrid, addDays, daysBetween, todayIn, sum, valueOn } from "./metrics.js";
 import { areaChart, sparkline, tableHTML } from "./charts.js";
 import { loadContent } from "./content.js";
 import { demoRows, demoIdeas, demoContent, demoSearchTop } from "./demo.js";
 import { logoTile } from "./logos.js";
+import { createChat } from "./chat.js";
 
 const TZ = "America/Toronto";
 const cfg = window.DASH_CONFIG || {};
@@ -67,6 +68,7 @@ class LiveStore {
   async updatePassword(password) { const { error } = await this.db.auth.updateUser({ password }); if (error) throw error; }
   async isAdmin() { const { data, error } = await this.db.rpc("is_admin"); if (error) throw error; return data === true; }
   async signOut() { await this.db.auth.signOut(); }
+  async token() { const { data } = await this.db.auth.getSession(); return data.session?.access_token || ""; }
   async metrics(from) {
     const out = [];
     for (let i = 0; ; i += 1000) {
@@ -502,7 +504,7 @@ $("#range").addEventListener("click", (e) => {
 });
 function syncRange() { for (const b of $("#range").children) b.setAttribute("aria-checked", String(Number(b.dataset.days) === state.days)); }
 
-const TITLES = { overview: null, search: "Google Search", calendar: "Content calendar", ideas: "Ideas board" };
+const TITLES = { overview: null, search: "Google Search", calendar: "Content calendar", ideas: "Ideas board", ask: "Ask Claude" };
 function route() {
   const v = (location.hash || "#overview").slice(1);
   state.view = TITLES.hasOwnProperty(v) ? v : "overview";
@@ -521,6 +523,40 @@ function renderAll() {
   if (state.view === "search") renderSearch();
   if (state.view === "calendar") renderCalendar();
   if (state.view === "ideas") renderBoard();
+  if (state.view === "ask") renderAsk();
+}
+
+// ---------------------------------------------------------------------------
+// Ask Claude
+// ---------------------------------------------------------------------------
+let chat = null, chatDemo = null;
+function chatContext() {
+  const today = todayIn(TZ), from = addDays(today, -30);
+  const lines = [`Today: ${today} (Toronto).`];
+  for (const p of PLATFORMS) {
+    const g = growth(state.rows, p.id, p.metric, from, today);
+    if (g.now != null) lines.push(`- ${p.name}: ${g.now} ${p.unit}${g.change != null ? ` (${g.change >= 0 ? "+" : ""}${g.change} in 30 days)` : ""}${p.manual ? ", entered by hand" : ""}`);
+  }
+  const visits = sum(series(state.rows, "website", "visits", from, today));
+  if (visits) lines.push(`- Website: ${visits} visits in the last 30 days`);
+  const clicks = sum(series(state.rows, "search", "clicks", from, today)), impr = sum(series(state.rows, "search", "impressions", from, today));
+  if (clicks || impr) lines.push(`- Google Search, last 30 days: ${clicks} clicks, ${impr} impressions`);
+  const q = state.searchTop.filter((r) => r.kind === "query").slice(0, 8).map((r) => `"${r.item}" (${r.impressions} impr.)`);
+  if (q.length) lines.push(`- Top searches finding the site: ${q.join(", ")}`);
+  const ideas = state.ideas.filter((i) => i.stage !== "posted").slice(0, 10).map((i) => `${i.title} [${i.stage}]`);
+  if (ideas.length) lines.push(`- Ideas board: ${ideas.join("; ")}`);
+  const drafts = (state.content || []).filter((c) => c.type === "draft").slice(0, 8).map((c) => c.title);
+  if (drafts.length) lines.push(`- Blog drafts waiting: ${drafts.join("; ")}`);
+  return lines.join("\n");
+}
+function renderAsk() {
+  if (chat && chatDemo === store.demo) return;
+  chatDemo = store.demo;
+  chat = createChat({
+    root: $("#ask-root"), demo: store.demo,
+    endpoint: `${(cfg.supabaseUrl || "").replace(/\/$/, "")}/functions/v1/ask-claude`,
+    getToken: () => store.token(), getContext: chatContext, toast,
+  });
 }
 
 // ---------------------------------------------------------------------------

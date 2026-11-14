@@ -92,3 +92,13 @@ Any key you leave out is just skipped, so you can add them one at a time.
 | `tests/` | `npm test` |
 
 The page tells search engines not to index it (`noindex` and `robots.txt`).
+
+## Ask Claude
+
+The **Ask Claude** page chats with Claude using your own Anthropic API key. The key never touches the browser: it lives in a Supabase Edge Function (`supabase/functions/ask-claude`) that only signed-in dashboard admins can call. Claude also gets a short summary of your current numbers, ideas and drafts so it can answer questions about them.
+
+Setup (once):
+1. Supabase → **Edge Functions → Deploy a new function → Via editor**. Name it `ask-claude`, paste `supabase/functions/ask-claude/index.ts`, and deploy.
+2. Supabase → **Edge Functions → Secrets**: add `ANTHROPIC_API_KEY` with your key from console.anthropic.com.
+
+You pay Anthropic per use: Sonnet 5.5 is $2 / $10 per million input / output tokens, so a typical chat message costs well under a cent.

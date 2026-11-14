@@ -86,3 +86,24 @@ test("Instagram uses the renewed token unless the secret was replaced", () => {
   assert.equal(pickInstagramToken(null, "orig").token, "orig");
   assert.equal(pickInstagramToken(null, "orig").renewedAt, null);
 });
+
+import { renderMarkdown, parseSSE } from "../assets/chat.js";
+
+test("chat markdown is escaped and formatted", () => {
+  const html = renderMarkdown("**Hi** <script>x</script>\n- one\n- two\n\n```\na<b\n```");
+  assert.ok(html.includes("<strong>Hi</strong>"));
+  assert.ok(html.includes("&lt;script&gt;"));
+  assert.ok(html.includes("<ul><li>one</li><li>two</li></ul>"));
+  assert.ok(html.includes("<pre><code>a&lt;b</code></pre>"));
+  assert.ok(!renderMarkdown("[x](javascript:alert(1))").includes("<a "));
+});
+
+test("chat stream parser collects text deltas across chunks", () => {
+  let out = "";
+  const ev = (t) => `event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":${JSON.stringify(t)}}}\n\n`;
+  const all = ev("Hel") + ev("lo") + "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n";
+  let rest = parseSSE(all.slice(0, 50), (t) => (out += t));
+  rest = parseSSE(rest + all.slice(50), (t) => (out += t));
+  assert.equal(out, "Hello");
+  assert.equal(rest, "");
+});
