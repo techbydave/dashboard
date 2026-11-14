@@ -1,16 +1,22 @@
-// Supabase Edge Function: ask-claude
-// Lets the dashboard chat with Claude using YOUR Anthropic API key, which stays here on the
-// server (set it as the ANTHROPIC_API_KEY secret in Supabase). The browser never sees it.
-// Only signed-in dashboard admins (public.is_admin()) can use it.
+// Supabase Edge Function: ask-claude  (powers "TechByDave AI" in the dashboard)
+// Chats with Google Gemini (free tier, GEMINI_API_KEY secret) or Claude (ANTHROPIC_API_KEY secret).
+// Keys stay here on the server; the browser never sees them. Only signed-in dashboard admins
+// (public.is_admin()) can use it. Replies are streamed back in one format for both providers.
 
 const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ??
   "https://dashboard.techbydave.com,https://techbydave.github.io,http://localhost:8765").split(",").map((s) => s.trim());
-const MODELS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
-const DEFAULT_MODEL = "claude-sonnet-5-5";
+// Dashboard model id -> provider + real model id. Gemini "latest" aliases follow Google's newest Flash models.
+const MODELS: Record<string, { provider: "gemini" | "claude"; id: string; fallback?: string }> = {
+  "gemini-flash": { provider: "gemini", id: "gemini-flash-latest", fallback: "gemini-flash-lite-latest" },
+  "gemini-flash-lite": { provider: "gemini", id: "gemini-flash-lite-latest" },
+  "claude-sonnet-5-5": { provider: "claude", id: "claude-sonnet-5-5" },
+  "claude-opus-5-5": { provider: "claude", id: "claude-opus-5-5" },
+};
+const DEFAULT_MODEL = "gemini-flash";
 const MAX_MESSAGES = 40;
 const MAX_CHARS = 120_000;
 
-const SYSTEM = `You are Claude, made by Anthropic, working as Dave's assistant inside his private TechByDave dashboard.
+const SYSTEM = `You are TechByDave AI, Dave's personal assistant inside his private TechByDave dashboard.
 
 About Dave and TechByDave:
 - Dave runs TechByDave (techbydave.com), a consumer-tech and gadget blog, rebranded from "Tech Treck". Based in Toronto.
@@ -54,9 +60,6 @@ Deno.serve(async (req) => {
   });
   if (!check.ok || (await check.json()) !== true) return json({ error: "Not allowed. Sign in to the dashboard first." }, 403, h);
 
-  const key = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!key) return json({ error: "ANTHROPIC_API_KEY isn't set in Supabase yet (Edge Functions > Secrets)." }, 500, h);
-
   // 2. Validate what the page sent.
   let body: { messages?: unknown; model?: unknown; context?: unknown };
   try { body = await req.json(); } catch { return json({ error: "Bad request." }, 400, h); }
@@ -67,15 +70,21 @@ Deno.serve(async (req) => {
   while (messages.length && messages[0].role !== "user") messages.shift();
   if (!messages.length || messages[messages.length - 1].role !== "user") return json({ error: "Send a message first." }, 400, h);
   if (messages.reduce((n, m) => n + m.content.length, 0) > MAX_CHARS) return json({ error: "This chat is too long. Start a new one." }, 400, h);
-  const model = MODELS.includes(String(body.model)) ? String(body.model) : DEFAULT_MODEL;
+  const choice = MODELS[String(body.model)] ?? MODELS[DEFAULT_MODEL];
   const context = typeof body.context === "string" ? body.context.slice(0, 8_000) : "";
-  const system = context ? `${SYSTEM}\n\nHis dashboard right now (use when relevant):\n${context}` : SYSTEM;
+  const engine = choice.provider === "gemini" ? "Google Gemini" : "Anthropic's Claude";
+  const system = `${SYSTEM}\n- If asked what powers you: TechByDave AI is running on ${engine} right now.` +
+    (context ? `\n\nHis dashboard right now (use when relevant):\n${context}` : "");
+
+  if (choice.provider === "gemini") return gemini(choice, system, messages, h);
 
   // 3. Ask Claude and stream the answer straight back.
+  const key = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!key) return json({ error: "Claude isn't set up: add ANTHROPIC_API_KEY in Supabase (Edge Functions > Secrets), or pick a Gemini model." }, 500, h);
   const upstream = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({ model, max_tokens: 4096, system, messages, stream: true }),
+    body: JSON.stringify({ model: choice.id, max_tokens: 4096, system, messages, stream: true }),
   });
   if (!upstream.ok || !upstream.body) {
     const text = await upstream.text();
@@ -85,3 +94,48 @@ Deno.serve(async (req) => {
   }
   return new Response(upstream.body, { headers: { ...h, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } });
 });
+
+// ---- Google Gemini: stream, then re-emit as the same text events the page already understands ----
+async function gemini(choice: { id: string; fallback?: string }, system: string, messages: { role: string; content: string }[], h: Record<string, string>) {
+  const key = Deno.env.get("GEMINI_API_KEY");
+  if (!key) return json({ error: "Gemini isn't set up: add GEMINI_API_KEY in Supabase (Edge Functions > Secrets)." }, 500, h);
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: system }] },
+    contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+    generationConfig: { maxOutputTokens: 4096 },
+  });
+  const call = (id: string) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${id}:streamGenerateContent?alt=sse`, {
+    method: "POST", headers: { "x-goog-api-key": key, "Content-Type": "application/json" }, body,
+  });
+  let upstream = await call(choice.id);
+  if (!upstream.ok && choice.fallback && [404, 429, 500, 503].includes(upstream.status)) upstream = await call(choice.fallback);
+  if (!upstream.ok || !upstream.body) {
+    const text = await upstream.text();
+    let msg = text.slice(0, 300);
+    try { msg = JSON.parse(text)?.error?.message ?? msg; } catch { /* keep raw */ }
+    if (upstream.status === 429) msg = "Gemini's free limit is used up for now. Wait a minute (or until tomorrow) and try again.";
+    return json({ error: `Gemini: ${msg}` }, upstream.status === 400 || upstream.status === 403 ? 502 : upstream.status, h);
+  }
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  let buf = "";
+  const emit = (ctl: TransformStreamDefaultController<Uint8Array>, obj: unknown, event: string) =>
+    ctl.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(obj)}\n\n`));
+  const handle = (chunk: string, ctl: TransformStreamDefaultController<Uint8Array>) => {
+    const data = chunk.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("");
+    if (!data) return;
+    let msg: any; try { msg = JSON.parse(data); } catch { return; }
+    if (msg.error) return emit(ctl, { type: "error", error: { message: msg.error.message ?? "Gemini error" } }, "error");
+    const parts = msg.candidates?.[0]?.content?.parts ?? [];
+    const text = parts.filter((p: any) => !p.thought && typeof p.text === "string").map((p: any) => p.text).join("");
+    if (text) emit(ctl, { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } }, "content_block_delta");
+  };
+  const out = upstream.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+    transform(bytes, ctl) {
+      buf += dec.decode(bytes, { stream: true }).replace(/\r\n/g, "\n");
+      const chunks = buf.split("\n\n"); buf = chunks.pop() ?? "";
+      for (const c of chunks) handle(c, ctl);
+    },
+    flush(ctl) { if (buf.trim()) handle(buf, ctl); emit(ctl, { type: "message_stop" }, "message_stop"); },
+  }));
+  return new Response(out, { headers: { ...h, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } });
+}

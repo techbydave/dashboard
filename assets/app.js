@@ -504,7 +504,7 @@ $("#range").addEventListener("click", (e) => {
 });
 function syncRange() { for (const b of $("#range").children) b.setAttribute("aria-checked", String(Number(b.dataset.days) === state.days)); }
 
-const TITLES = { overview: null, search: "Google Search", calendar: "Content calendar", ideas: "Ideas board", ask: "Ask Claude" };
+const TITLES = { overview: null, search: "Google Search", calendar: "Content calendar", ideas: "Ideas board", ask: "TechByDave AI" };
 function route() {
   const v = (location.hash || "#overview").slice(1);
   state.view = TITLES.hasOwnProperty(v) ? v : "overview";
@@ -527,7 +527,7 @@ function renderAll() {
 }
 
 // ---------------------------------------------------------------------------
-// Ask Claude
+// TechByDave AI chat
 // ---------------------------------------------------------------------------
 let chat = null, chatDemo = null;
 function chatContext() {

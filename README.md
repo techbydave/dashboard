@@ -93,12 +93,13 @@ Any key you leave out is just skipped, so you can add them one at a time.
 
 The page tells search engines not to index it (`noindex` and `robots.txt`).
 
-## Ask Claude
+## TechByDave AI
 
-The **Ask Claude** page chats with Claude using your own Anthropic API key. The key never touches the browser: it lives in a Supabase Edge Function (`supabase/functions/ask-claude`) that only signed-in dashboard admins can call. Claude also gets a short summary of your current numbers, ideas and drafts so it can answer questions about them.
+The **TechByDave AI** page is a chat assistant that knows your brand and sees a summary of your current numbers, ideas and drafts. It runs on **Google Gemini's free tier** by default, with Claude as an optional paid upgrade. API keys never touch the browser: they live in a Supabase Edge Function (`supabase/functions/ask-claude`) that only signed-in dashboard admins can call.
 
 Setup (once):
-1. Supabase → **Edge Functions → Deploy a new function → Via editor**. Name it `ask-claude`, paste `supabase/functions/ask-claude/index.ts`, and deploy.
-2. Supabase → **Edge Functions → Secrets**: add `ANTHROPIC_API_KEY` with your key from console.anthropic.com.
+1. Get a free key at **aistudio.google.com → Get API key**.
+2. Supabase → **Edge Functions → Secrets**: add `GEMINI_API_KEY`. (Optional: add `ANTHROPIC_API_KEY` too, to use the Claude models in the picker.)
+3. The function is deployed from `supabase/functions/ask-claude/index.ts` (Edge Functions → ask-claude → Code). Its "Verify JWT with legacy secret" setting is off because the function checks admin access itself.
 
-You pay Anthropic per use: Sonnet 5.5 is $2 / $10 per million input / output tokens, so a typical chat message costs well under a cent.
+Gemini's free tier is rate-limited, and Google may use free-tier requests to improve its products, so don't paste anything private you wouldn't want used that way.

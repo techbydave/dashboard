@@ -363,7 +363,7 @@ dialog::backdrop { background: rgba(4,6,14,.6); backdrop-filter: blur(3px); }
 .mono.logo.logo-pinterest svg { width: 28px; height: 28px; }
 .logo-newsletter { background: linear-gradient(135deg, #1b6fd1, #7fd6ff); }
 
-/* Ask Claude */
+/* TechByDave AI chat */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .chat { display: grid; grid-template-rows: auto 1fr auto auto; gap: 12px; height: calc(100dvh - 150px); min-height: 460px; max-width: 860px; margin: 0 auto; }
 .chat-bar { display: flex; gap: 10px; justify-content: space-between; align-items: center; }
@@ -372,8 +372,12 @@ dialog::backdrop { background: rgba(4,6,14,.6); backdrop-filter: blur(3px); }
 .chat-empty { display: grid; justify-items: center; text-align: center; gap: 8px; padding: 9vh 12px 0; }
 .chat-empty h2 { font-size: 1.5rem; letter-spacing: -.01em; }
 .chat-empty p { max-width: 440px; margin: 0; }
-.chat-mark { width: 56px; height: 56px; display: grid; place-items: center; font-size: 28px; border-radius: 18px; color: #fff;
-  background: linear-gradient(135deg, #d97757, var(--beacon)); box-shadow: 0 10px 30px -10px color-mix(in srgb, #d97757 70%, transparent); }
+.chat-mark { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 20px;
+  background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--beacon) 22%, var(--panel-2)), var(--panel));
+  border: 1px solid color-mix(in srgb, var(--beacon) 35%, var(--line)); box-shadow: 0 12px 40px -14px color-mix(in srgb, var(--beacon) 60%, transparent); }
+.chat-mark .beacon-dot { width: 20px; height: 20px; animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+.chat-empty h2 .hl { color: var(--beacon); }
 .chat-suggest { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 18px; width: 100%; max-width: 640px; }
 .suggest { text-align: left; font: inherit; font-size: .9rem; color: var(--ink-2); background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
   padding: 12px 14px; cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
@@ -383,8 +387,9 @@ dialog::backdrop { background: rgba(4,6,14,.6); backdrop-filter: blur(3px); }
 .msg.user .msg-body { background: color-mix(in srgb, var(--beacon) 16%, var(--panel-2)); border: 1px solid color-mix(in srgb, var(--beacon) 30%, var(--line));
   border-radius: 18px 18px 4px 18px; padding: 10px 14px; max-width: min(80%, 620px); white-space: normal; overflow-wrap: anywhere; }
 .msg.assistant .msg-body { flex: 1; min-width: 0; padding-top: 4px; line-height: 1.6; overflow-wrap: anywhere; }
-.msg-avatar { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 10px; color: #fff; font-size: 15px;
-  background: linear-gradient(135deg, #d97757, var(--beacon)); }
+.msg-avatar { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 10px;
+  background: var(--panel-2); border: 1px solid color-mix(in srgb, var(--beacon) 30%, var(--line)); }
+.msg-avatar .beacon-dot { width: 10px; height: 10px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--beacon) 25%, transparent), 0 0 10px var(--beacon); }
 .msg-body p { margin: 0 0 .7em; } .msg-body p:last-child { margin-bottom: 0; }
 .msg-body ul, .msg-body ol { margin: 0 0 .7em; padding-left: 1.3em; } .msg-body li { margin: .2em 0; }
 .msg-body h4 { margin: .9em 0 .3em; font-size: 1rem; }
@@ -412,3 +417,4 @@ dialog::backdrop { background: rgba(4,6,14,.6); backdrop-filter: blur(3px); }
   .chat-model select { max-width: 200px; }
   .chat-foot { display: none; }
 }
+@media (prefers-reduced-motion: reduce) { .chat-mark .beacon-dot, .typing i, .msg { animation: none; } }

@@ -1,15 +1,16 @@
-// "Ask Claude" chat page. Talks to the ask-claude Supabase Edge Function, which holds
-// your Anthropic API key and streams Claude's reply back here.
+// "TechByDave AI" chat page. Talks to the ask-claude Supabase Edge Function, which holds
+// the API keys (Google Gemini, optionally Claude) and streams the reply back here.
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const KEY = "tbd-chat";
-const MODEL_KEY = "tbd-chat-model";
+const MODEL_KEY = "tbd-ai-model";
 const MAX_SAVED = 40;
 
 export const MODELS = [
-  ["claude-sonnet-5-5", "Sonnet 5.5", "Fast, great for most things"],
-  ["claude-opus-5-5", "Opus 5.5", "Smartest, costs ~2× more"],
-  ["claude-haiku-5-5", "Haiku 5.5", "Quickest and cheapest"],
+  ["gemini-flash", "Gemini Flash", "Free"],
+  ["gemini-flash-lite", "Gemini Flash-Lite", "Free, fastest"],
+  ["claude-sonnet-5-5", "Claude Sonnet 5.5", "Paid, needs Anthropic key"],
+  ["claude-opus-5-5", "Claude Opus 5.5", "Paid, smartest"],
 ];
 
 const SUGGESTIONS = [
@@ -64,7 +65,7 @@ export function parseSSE(buffer, onText) {
     if (!data) continue;
     let msg; try { msg = JSON.parse(data); } catch { continue; }
     if (msg.type === "content_block_delta" && msg.delta?.type === "text_delta") onText(msg.delta.text);
-    if (msg.type === "error") throw new Error(msg.error?.message || "Claude ran into an error.");
+    if (msg.type === "error") throw new Error(msg.error?.message || "The AI ran into an error.");
   }
   return rest;
 }
@@ -85,10 +86,10 @@ export function createChat({ root, demo, endpoint, getToken, getContext, toast }
       </div>
       <div class="chat-log" id="chat-log" aria-live="polite"></div>
       <form class="chat-compose" id="chat-form">
-        <textarea id="chat-input" rows="1" placeholder="Ask Claude anything…" aria-label="Message Claude"></textarea>
+        <textarea id="chat-input" rows="1" placeholder="Ask TechByDave AI anything…" aria-label="Message TechByDave AI"></textarea>
         <button class="chat-send" type="submit" id="chat-send" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
       </form>
-      <p class="chat-foot muted">Uses your Anthropic API key. Claude can make mistakes, so double-check anything important.</p>
+      <p class="chat-foot muted">TechByDave AI can make mistakes, so double-check anything important.</p>
     </div>`;
 
   const log = root.querySelector("#chat-log"), form = root.querySelector("#chat-form"), input = root.querySelector("#chat-input");
@@ -98,15 +99,15 @@ export function createChat({ root, demo, endpoint, getToken, getContext, toast }
 
   const save = () => lsSet(KEY, messages.slice(-MAX_SAVED));
   const bubble = (m) => `<div class="msg ${m.role}">${m.role === "assistant"
-    ? `<div class="msg-avatar" aria-hidden="true">✳</div><div class="msg-body">${m.content ? renderMarkdown(m.content) : '<span class="typing"><i></i><i></i><i></i></span>'}</div>`
+    ? `<div class="msg-avatar" aria-hidden="true"><span class="beacon-dot"></span></div><div class="msg-body">${m.content ? renderMarkdown(m.content) : '<span class="typing"><i></i><i></i><i></i></span>'}</div>`
     : `<div class="msg-body">${esc(m.content).replace(/\n/g, "<br>")}</div>`}</div>`;
 
   function draw() {
     if (!messages.length) {
       log.innerHTML = `<div class="chat-empty">
-        <div class="chat-mark" aria-hidden="true">✳</div>
-        <h2>What are we working on, Dave?</h2>
-        <p class="muted">Claude can see your dashboard numbers, so ask about growth, content ideas, pitches, anything.</p>
+        <div class="chat-mark" aria-hidden="true"><span class="beacon-dot"></span></div>
+        <h2>TechBy<span class="hl">Dave</span> AI</h2>
+        <p class="muted">Your assistant that knows your brand and sees your dashboard numbers. Ask about growth, content ideas, pitches, anything.</p>
         <div class="chat-suggest">${SUGGESTIONS.map((s) => `<button type="button" class="suggest">${esc(s)}</button>`).join("")}</div>
       </div>`;
       log.querySelectorAll(".suggest").forEach((b) => b.addEventListener("click", () => { input.value = b.textContent; submit(); }));
@@ -134,7 +135,7 @@ export function createChat({ root, demo, endpoint, getToken, getContext, toast }
     const live = () => log.lastElementChild?.querySelector(".msg-body");
 
     if (demo) {
-      reply.content = "This is the demo, so I'm not connected yet. Once your Anthropic API key is added in Supabase, I'll answer here using your real dashboard numbers.";
+      reply.content = "This is the demo, so I'm not connected yet. Once your free Gemini key is added in Supabase, I'll answer here using your real dashboard numbers.";
       live().innerHTML = renderMarkdown(reply.content); save(); return;
     }
 
@@ -163,7 +164,7 @@ export function createChat({ root, demo, endpoint, getToken, getContext, toast }
         }
       }
     } catch (err) {
-      if (err.name !== "AbortError") { reply.content += (reply.content ? "\n\n" : "") + `⚠️ ${err.message}`; toast?.("Claude couldn't answer"); }
+      if (err.name !== "AbortError") { reply.content += (reply.content ? "\n\n" : "") + `⚠️ ${err.message}`; toast?.("TechByDave AI couldn't answer"); }
     } finally {
       controller = null; setBusy(false);
       if (!reply.content) messages.pop();
