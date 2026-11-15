@@ -107,3 +107,32 @@ test("chat stream parser collects text deltas across chunks", () => {
   assert.equal(out, "Hello");
   assert.equal(rest, "");
 });
+
+import { problems, costNote, hashtagText, fullCaption } from "../assets/post.js";
+
+test("post page: hashtags are cleaned and de-duplicated", () => {
+  assert.equal(hashtagText("#tech, Tech  iphone ##apple bad-tag"), "#tech #iphone #apple #badtag");
+  assert.equal(fullCaption({ caption: " Hi ", hashtags: "a" }), "Hi\n\n#a");
+  assert.equal(fullCaption({ caption: "", hashtags: "" }), "");
+});
+
+test("post page: problems block bad posts", () => {
+  const accounts = [{ id: "y", platform: "youtube" }, { id: "t", platform: "tiktok" }, { id: "p", platform: "pinterest" }, { id: "x", platform: "twitter" }];
+  const base = { accounts, mediaType: "video" };
+  assert.deepEqual(problems({ ...base, mediaType: null, selected: [], fields: {} }), ["Add a photo or video.", "Pick at least one account."]);
+  const p = problems({ ...base, selected: ["y", "t", "p", "x"], fields: { x: { caption: "a".repeat(300) } } });
+  assert.ok(p.includes("YouTube needs a title."));
+  assert.ok(p.includes("Pick a Pinterest board."));
+  assert.ok(p.includes("Pick who can see the TikTok post."));
+  assert.ok(p.includes("Tick the TikTok consent box."));
+  assert.ok(p.some((m) => m.startsWith("X: caption is 20 characters too long")));
+  assert.ok(problems({ ...base, mediaType: "image", selected: ["y"], fields: { y: { title: "T" } } }).includes("YouTube only takes videos."));
+  assert.deepEqual(problems({ ...base, selected: ["y", "t", "p"], fields: { y: { title: "T" }, t: { privacy: "SELF_ONLY", consent: true }, p: { boardId: "1" } } }), []);
+});
+
+test("post page: X cost warning mentions links", () => {
+  const accounts = [{ id: "x", platform: "twitter" }, { id: "i", platform: "instagram" }];
+  assert.equal(costNote(accounts, ["i"], {}), "");
+  assert.match(costNote(accounts, ["x"], { x: { caption: "hi" } }), /0\.015/);
+  assert.match(costNote(accounts, ["x"], { x: { caption: "read techbydave.com" } }), /0\.20/);
+});

@@ -8,6 +8,7 @@ import { loadContent } from "./content.js";
 import { demoRows, demoIdeas, demoContent, demoSearchTop } from "./demo.js";
 import { logoTile } from "./logos.js";
 import { createChat } from "./chat.js";
+import { createPoster } from "./post.js";
 
 const TZ = "America/Toronto";
 const cfg = window.DASH_CONFIG || {};
@@ -504,7 +505,7 @@ $("#range").addEventListener("click", (e) => {
 });
 function syncRange() { for (const b of $("#range").children) b.setAttribute("aria-checked", String(Number(b.dataset.days) === state.days)); }
 
-const TITLES = { overview: null, search: "Google Search", calendar: "Content calendar", ideas: "Ideas board", ask: "TechByDave AI" };
+const TITLES = { overview: null, search: "Google Search", calendar: "Content calendar", ideas: "Ideas board", ask: "TechByDave AI", post: "Post to socials" };
 function route() {
   const v = (location.hash || "#overview").slice(1);
   state.view = TITLES.hasOwnProperty(v) ? v : "overview";
@@ -524,6 +525,7 @@ function renderAll() {
   if (state.view === "calendar") renderCalendar();
   if (state.view === "ideas") renderBoard();
   if (state.view === "ask") renderAsk();
+  if (state.view === "post") renderPost();
 }
 
 // ---------------------------------------------------------------------------
@@ -556,6 +558,20 @@ function renderAsk() {
     root: $("#ask-root"), demo: store.demo,
     endpoint: `${(cfg.supabaseUrl || "").replace(/\/$/, "")}/functions/v1/ask-claude`,
     getToken: () => store.token(), getContext: chatContext, toast,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Post to socials
+// ---------------------------------------------------------------------------
+let poster = null, posterDemo = null;
+function renderPost() {
+  if (poster && posterDemo === store.demo) return;
+  posterDemo = store.demo;
+  const base = (cfg.supabaseUrl || "").replace(/\/$/, "");
+  poster = createPoster({
+    root: $("#post-root"), demo: store.demo, endpoint: `${base}/functions/v1/social-post`,
+    supabaseUrl: base, anonKey: cfg.supabaseAnonKey, getToken: () => store.token(), toast,
   });
 }
 

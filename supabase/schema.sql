@@ -100,3 +100,13 @@ create table if not exists public.tokens (
   updated_at timestamptz not null default now()
 );
 alter table public.tokens enable row level security;
+
+-- Backup upload bucket for the Post page (used only if a direct upload to Zernio is blocked).
+-- Public reads so the social networks can fetch the file; only dashboard admins can upload or delete.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('social-media', 'social-media', true, 52428800)
+on conflict (id) do nothing;
+create policy "admins upload social media" on storage.objects for insert to authenticated
+  with check (bucket_id = 'social-media' and public.is_admin());
+create policy "admins delete social media" on storage.objects for delete to authenticated
+  using (bucket_id = 'social-media' and public.is_admin());

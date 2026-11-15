@@ -103,3 +103,17 @@ Setup (once):
 3. The function is deployed from `supabase/functions/ask-claude/index.ts` (Edge Functions → ask-claude → Code). Its "Verify JWT with legacy secret" setting is off because the function checks admin access itself.
 
 Gemini's free tier is rate-limited, and Google may use free-tier requests to improve its products, so don't paste anything private you wouldn't want used that way.
+
+## Post to socials
+
+The **Post** page uploads a photo or video once and publishes it to the accounts you pick (Instagram, TikTok, YouTube, X, Pinterest and more), now or on a schedule. **Suggest with AI** writes a title, caption and hashtags tailored to each platform from what you type and a frame of your video. Everything stays editable.
+
+Posting goes through [Zernio](https://zernio.com), whose apps are already approved by each network, so posts are public immediately (your own unaudited apps would be stuck private on YouTube and TikTok). The `social-post` Edge Function holds the keys; only signed-in admins can use it.
+
+Setup (once):
+1. Sign up at zernio.com, connect your accounts, and create an API key.
+2. Supabase → **Edge Functions → Secrets**: add `ZERNIO_API_KEY`. (`GEMINI_API_KEY`, already there, powers the suggestions.)
+3. Deploy `supabase/functions/social-post/index.ts` as a function named `social-post`, with "Verify JWT with legacy secret" off.
+4. Run the "Backup upload bucket" part of `supabase/schema.sql`.
+
+Cost: the first 2 connected accounts are free, then $6/month each. X also bills about $0.015 per post ($0.20 if it contains a link); the page warns you.
