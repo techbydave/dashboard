@@ -494,3 +494,7 @@ p.pz-err { padding-left: 0; }
 .pz .mono.logo svg { width: 58% !important; height: 58% !important; }
 .pz .mono.logo.logo-pinterest svg, .pz .mono.logo.logo-youtube svg { width: 72% !important; height: 72% !important; }
 .pz .mono.logo:not([class*="logo-instagram"]):not([class*="logo-tiktok"]):not([class*="logo-youtube"]):not([class*="logo-x"]):not([class*="logo-pinterest"]) { background: var(--panel-2); color: var(--ink); font-size: .7rem; }
+.pz-warn { margin: 0 0 12px; padding: 10px 12px 10px 28px; border-radius: 12px; font-size: .84rem; color: var(--ink-2);
+  background: color-mix(in srgb, var(--beacon) 10%, transparent); border: 1px solid color-mix(in srgb, var(--beacon) 35%, var(--line)); }
+.pz-manual { font-size: .84rem; margin: 8px 0 0; }
+.pz-pill.s-processing, .pz-pill.s-pending, .pz-pill.s-publishing { color: var(--beacon); border-color: color-mix(in srgb, var(--beacon) 40%, var(--line)); }

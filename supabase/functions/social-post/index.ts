@@ -3,7 +3,10 @@
 // already approved by Instagram, TikTok, YouTube, X and Pinterest, so posts go public right away.
 // Also writes AI suggestions for titles, captions and hashtags with Google Gemini (free tier).
 //
-// Secrets (Supabase > Edge Functions > Secrets): ZERNIO_API_KEY (required), GEMINI_API_KEY (for suggestions).
+// Instagram can also post directly through Dave's own Meta app (free): set IG_ACCESS_TOKEN, a token with
+// instagram_content_publish. It shows up as an account when Zernio has no Instagram account connected.
+//
+// Secrets (Supabase > Edge Functions > Secrets): ZERNIO_API_KEY, IG_ACCESS_TOKEN, GEMINI_API_KEY (for suggestions).
 // Only signed-in dashboard admins (public.is_admin()) can call it. Keys never reach the browser.
 
 const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ??
@@ -44,6 +47,27 @@ async function zernio(path: string, init: RequestInit = {}) {
   return data;
 }
 
+// ---- Instagram, direct through the Meta Graph API ------------------------------------------------
+const IG_HOSTS = ["https://graph.facebook.com/v25.0", "https://graph.instagram.com/v25.0"];
+const igUser = () => Deno.env.get("IG_USER_ID") || "17841471747675635"; // @techby_dave
+
+async function ig(method: "GET" | "POST", path: string, params: Record<string, string>) {
+  const token = Deno.env.get("IG_ACCESS_TOKEN");
+  if (!token) throw new HttpError(500, "Instagram isn't set up: add IG_ACCESS_TOKEN in Supabase (Edge Functions > Secrets).");
+  let last = "";
+  for (const host of IG_HOSTS) {
+    const qs = new URLSearchParams({ ...params, access_token: token.trim() });
+    const res = method === "GET" ? await fetch(`${host}${path}?${qs}`) : await fetch(`${host}${path}`, { method: "POST", body: qs });
+    const data: any = await res.json().catch(() => ({}));
+    if (res.ok && !data.error) return data;
+    last = data?.error?.error_user_msg ?? data?.error?.message ?? `HTTP ${res.status}`;
+    // Only a token-type mismatch is worth trying on the other host.
+    if (data?.error?.code !== 190 && !/access token|OAuth/i.test(last)) break;
+  }
+  if (/permission|\(#10\)|\(#200\)/i.test(last)) last += " Add instagram_content_publish to your Meta app's configuration, generate a new token and save it as IG_ACCESS_TOKEN.";
+  throw new HttpError(502, `Instagram: ${last}`);
+}
+
 // ---- building the Zernio post -------------------------------------------------------------
 type Target = {
   platform: string; accountId: string;
@@ -72,7 +96,7 @@ export function buildPost(input: { targets: Target[]; media: { url: string; type
   const isVideo = input.media.some((m) => m.type === "video");
   let tiktokSettings: Record<string, unknown> | undefined;
   const platforms = input.targets.map((t) => {
-    if (!PLATFORMS.includes(t.platform) || !t.accountId) throw new HttpError(400, `Unknown account: ${t.platform}`);
+    if (!PLATFORMS.includes(t.platform) || !t.accountId || /^(direct|manual)-/.test(t.accountId)) throw new HttpError(400, `Unknown account: ${t.platform}`);
     const caption = captionFor(t);
     const entry: Record<string, unknown> = { platform: t.platform, accountId: t.accountId, customContent: caption };
     const psd: Record<string, unknown> = {};
@@ -208,11 +232,42 @@ export async function handle(req: Request): Promise<Response> {
   try {
     switch (body.action) {
       case "accounts": {
-        const data = await zernio("/accounts");
-        const accounts = (data?.accounts ?? []).filter((a: any) => a.isActive !== false).map((a: any) => ({
-          id: a._id ?? a.id, platform: a.platform, username: a.username ?? "", name: a.displayName ?? a.username ?? a.platform,
-        })).filter((a: any) => PLATFORMS.includes(a.platform));
-        return json({ accounts }, 200, h);
+        const accounts: any[] = [], warnings: string[] = [];
+        if (Deno.env.get("ZERNIO_API_KEY")) {
+          const data = await zernio("/accounts");
+          accounts.push(...(data?.accounts ?? []).filter((a: any) => a.isActive !== false).map((a: any) => ({
+            id: a._id ?? a.id, platform: a.platform, username: a.username ?? "", name: a.displayName ?? a.username ?? a.platform,
+          })).filter((a: any) => PLATFORMS.includes(a.platform)));
+        } else warnings.push("TikTok and YouTube aren't connected yet: add ZERNIO_API_KEY in Supabase (Edge Functions > Secrets).");
+        if (!accounts.some((a) => a.platform === "instagram")) {
+          if (Deno.env.get("IG_ACCESS_TOKEN")) {
+            try {
+              const me = await ig("GET", `/${igUser()}`, { fields: "username" });
+              accounts.push({ id: "direct-instagram", platform: "instagram", username: me.username ?? "", name: me.username ?? "Instagram", direct: true });
+            } catch (err) { warnings.push((err as Error).message); }
+          } else warnings.push("Instagram isn't connected yet: add IG_ACCESS_TOKEN in Supabase (Edge Functions > Secrets).");
+        }
+        return json({ accounts, warnings }, 200, h);
+      }
+      case "ig-create": {
+        const mediaUrl = String(body.mediaUrl ?? "");
+        if (!/^https:\/\//.test(mediaUrl)) throw new HttpError(400, "Bad media item.");
+        const caption = String(body.caption ?? "").slice(0, 2200);
+        const params: Record<string, string> = body.mediaType === "video"
+          ? { media_type: "REELS", video_url: mediaUrl, share_to_feed: "true", caption }
+          : { image_url: mediaUrl, caption };
+        const data = await ig("POST", `/${igUser()}/media`, params);
+        return json({ containerId: data.id }, 200, h);
+      }
+      case "ig-status": {
+        const data = await ig("GET", `/${id(body.containerId)}`, { fields: "status_code,status" });
+        return json({ status: data.status_code ?? "IN_PROGRESS", detail: data.status ?? "" }, 200, h);
+      }
+      case "ig-publish": {
+        const data = await ig("POST", `/${igUser()}/media_publish`, { creation_id: id(body.containerId) });
+        let url: string | null = null;
+        try { url = (await ig("GET", `/${id(data.id)}`, { fields: "permalink" })).permalink ?? null; } catch { /* link is optional */ }
+        return json({ id: data.id, url }, 200, h);
       }
       case "boards": {
         const data = await zernio(`/accounts/${id(body.accountId)}/pinterest-boards`);

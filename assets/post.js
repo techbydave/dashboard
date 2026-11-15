@@ -22,6 +22,18 @@ const PRIVACY_LABELS = {
   PUBLIC_TO_EVERYONE: "Everyone", MUTUAL_FOLLOW_FRIENDS: "Friends", FOLLOWER_OF_CREATOR: "Followers", SELF_ONLY: "Only me",
 };
 const MAX_FALLBACK = 50 * 1024 * 1024;
+const HANDLE = "techby_dave";
+// Platforms that aren't connected get a "copy and paste" card: the page writes the text, Dave posts it himself.
+const MANUAL = { twitter: "https://x.com/compose/post", pinterest: "https://www.pinterest.com/pin-creation-tool/" };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+export function withManual(accounts) {
+  const out = [...accounts];
+  for (const platform of Object.keys(MANUAL)) {
+    if (!out.some((a) => a.platform === platform)) out.push({ id: `manual-${platform}`, platform, username: HANDLE, manual: true });
+  }
+  return out;
+}
 
 const tile = (platform) => {
   const info = PLATFORM_INFO[platform] ?? { name: platform, logo: platform };
@@ -35,7 +47,7 @@ export const hashtagText = (raw = "") =>
 export const fullCaption = (f) => [f.caption?.trim() ?? "", hashtagText(f.hashtags)].filter(Boolean).join("\n\n");
 
 /** Problems that would stop a post, per selected account. Pure, so it's easy to test. */
-export function problems({ accounts, selected, fields, mediaType }) {
+export function problems({ accounts, selected, fields, mediaType, when = "now" }) {
   const out = [];
   if (!mediaType) out.push("Add a photo or video.");
   if (!selected.length) out.push("Pick at least one account.");
@@ -43,13 +55,14 @@ export function problems({ accounts, selected, fields, mediaType }) {
     const acc = accounts.find((a) => a.id === id); if (!acc) continue;
     const f = fields[id] ?? {}, info = PLATFORM_INFO[acc.platform] ?? {}, name = info.name ?? acc.platform;
     const text = fullCaption(f);
+    if (acc.direct && when === "later") out.push(`${name} can only post right away from here. Choose Post now, or untick it.`);
     if (info.limit && text.length > info.limit) out.push(`${name}: caption is ${text.length - info.limit} characters too long.`);
     if (acc.platform === "youtube") {
       if (mediaType && mediaType !== "video") out.push("YouTube only takes videos.");
       if (!f.title?.trim()) out.push("YouTube needs a title.");
       else if (f.title.length > 100) out.push("YouTube title is over 100 characters.");
     }
-    if (acc.platform === "pinterest" && !f.boardId) out.push("Pick a Pinterest board.");
+    if (acc.platform === "pinterest" && !acc.manual && !f.boardId) out.push("Pick a Pinterest board.");
     if (acc.platform === "pinterest" && f.link && !/^https?:\/\//.test(f.link.trim())) out.push("Pinterest link must start with https://");
     if (acc.platform === "tiktok") {
       if (!f.privacy) out.push("Pick who can see the TikTok post.");
@@ -60,7 +73,7 @@ export function problems({ accounts, selected, fields, mediaType }) {
 }
 
 export function costNote(accounts, selected, fields) {
-  const x = selected.map((id) => accounts.find((a) => a.id === id)).find((a) => a?.platform === "twitter");
+  const x = selected.map((id) => accounts.find((a) => a.id === id)).find((a) => a?.platform === "twitter" && !a.manual);
   if (!x) return "";
   const hasLink = /https?:\/\/|www\.|\.(com|ca|io|net|org)\b/i.test(fullCaption(fields[x.id] ?? {}));
   return hasLink ? "X charges $0.20 for a post with a link (vs $0.015 without). Remove the link to save." : "X charges about $0.015 per post.";
@@ -95,10 +108,24 @@ function captureFrame(file, type) {
   });
 }
 
-function putWithProgress(url, file, headers, onProgress) {
+function toJpeg(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      c.toBlob((b) => b ? resolve(new File([b], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" })) : reject(new Error("Couldn't convert the photo to JPG.")), "image/jpeg", 0.92);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Couldn't read the photo.")); };
+    img.src = url;
+  });
+}
+
+function putWithProgress(url, file, headers, onProgress, method = "PUT") {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
+    xhr.open(method, url);
     Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
     xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status})`)));
@@ -108,16 +135,14 @@ function putWithProgress(url, file, headers, onProgress) {
 }
 
 const DEMO_ACCOUNTS = [
-  { id: "d-ig", platform: "instagram", username: "techby_dave" },
-  { id: "d-tt", platform: "tiktok", username: "techby_dave" },
-  { id: "d-yt", platform: "youtube", username: "techby_dave" },
-  { id: "d-x", platform: "twitter", username: "techby_dave" },
-  { id: "d-pin", platform: "pinterest", username: "techby_dave" },
+  { id: "direct-instagram", platform: "instagram", username: HANDLE, direct: true },
+  { id: "d-tt", platform: "tiktok", username: HANDLE },
+  { id: "d-yt", platform: "youtube", username: HANDLE },
 ];
 
 export function createPoster({ root, demo, endpoint, supabaseUrl, anonKey, getToken, toast }) {
   const st = {
-    accounts: null, loadError: "", selected: [], fields: {}, boards: {}, tiktok: {},
+    accounts: null, loadError: "", warnings: [], selected: [], fields: {}, boards: {}, tiktok: {},
     file: null, mediaType: null, preview: null, frame: null, about: "",
     when: "now", at: "", busy: "", progress: 0, result: null, recent: [], suggesting: false,
   };
@@ -139,10 +164,12 @@ export function createPoster({ root, demo, endpoint, supabaseUrl, anonKey, getTo
 
   // ---------- loading ----------
   async function loadAccounts() {
-    if (demo) { st.accounts = DEMO_ACCOUNTS; draw(); return; }
+    const sorted = (list) => withManual(list).sort((a, b) => ORDER.indexOf(a.platform) - ORDER.indexOf(b.platform));
+    if (demo) { st.accounts = sorted(DEMO_ACCOUNTS); draw(); return; }
     try {
-      const { accounts } = await api("accounts");
-      st.accounts = accounts.sort((a, b) => ORDER.indexOf(a.platform) - ORDER.indexOf(b.platform));
+      const { accounts, warnings } = await api("accounts");
+      st.accounts = sorted(accounts);
+      st.warnings = warnings ?? [];
       st.loadError = "";
     } catch (err) { st.accounts = []; st.loadError = err.message; }
     draw();
@@ -154,6 +181,7 @@ export function createPoster({ root, demo, endpoint, supabaseUrl, anonKey, getTo
   }
   async function ensureExtras(id) {
     const a = acct(id); if (!a) return;
+    if (a.manual || a.direct) { drawEditors(); return; }
     if (a.platform === "pinterest" && !st.boards[id]) {
       st.boards[id] = demo ? [{ id: "b1", name: "Gadgets worth it" }, { id: "b2", name: "Budget tech" }] : null;
       if (!demo) { try { st.boards[id] = (await api("boards", { accountId: id })).boards; } catch (err) { st.boards[id] = []; toast?.(err.message); } }
@@ -207,49 +235,98 @@ export function createPoster({ root, demo, endpoint, supabaseUrl, anonKey, getTo
     st.suggesting = false; drawEditors(); drawActions();
   }
 
-  async function upload() {
-    const f = st.file;
-    if (demo) { for (let i = 1; i <= 10; i++) { st.progress = i / 10; drawActions(); await new Promise((r) => setTimeout(r, 60)); } return "https://example.com/demo.mp4"; }
-    const { uploadUrl, publicUrl } = await api("presign", { filename: f.name, contentType: f.type, size: f.size });
+  async function upload(forInstagram) {
+    let f = st.file;
+    const onProgress = (p) => { st.progress = p; drawActions(); };
+    if (demo) { for (let i = 1; i <= 10; i++) { onProgress(i / 10); await sleep(50); } return "https://example.com/demo.mp4"; }
+    // Instagram only accepts JPG photos, so convert PNG/WebP first.
+    if (forInstagram && st.mediaType === "image" && f.type !== "image/jpeg") f = await toJpeg(f);
     try {
-      await putWithProgress(uploadUrl, f, { "Content-Type": f.type }, (p) => { st.progress = p; drawActions(); });
+      const { uploadUrl, publicUrl } = await api("presign", { filename: f.name, contentType: f.type, size: f.size });
+      await putWithProgress(uploadUrl, f, { "Content-Type": f.type }, onProgress);
       return publicUrl;
     } catch (err) {
-      if (err.message !== "network" || f.size > MAX_FALLBACK) throw new Error(err.message === "network" ? "Upload was blocked. Try a file under 50 MB." : err.message);
-      // Backup route: our own Supabase Storage bucket (admin-only uploads, public reads).
+      // Backup route: our own Supabase Storage bucket (admin-only uploads, public reads, 50 MB max).
+      if (f.size > MAX_FALLBACK) throw new Error(err.message === "network" ? "Upload was blocked. Try a file under 50 MB." : err.message);
       const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${f.name.replace(/[^\w.-]+/g, "_")}`;
-      await putWithProgress(`${supabaseUrl}/storage/v1/object/social-media/${path}`, f,
-        { Authorization: `Bearer ${await getToken()}`, apikey: anonKey, "Content-Type": f.type, "x-upsert": "false" },
-        (p) => { st.progress = p; drawActions(); });
+      try {
+        await putWithProgress(`${supabaseUrl}/storage/v1/object/social-media/${path}`, f,
+          { Authorization: `Bearer ${await getToken()}`, apikey: anonKey, "Content-Type": f.type, "x-upsert": "false" }, onProgress, "POST");
+      } catch { throw new Error(err.message === "network" ? "The upload didn't go through. Check your connection and try again." : err.message); }
       return `${supabaseUrl}/storage/v1/object/public/social-media/${path}`;
     }
   }
 
+  const manualText = (a) => {
+    const f = field(a.id);
+    return [a.platform === "pinterest" ? f.title?.trim() : "", fullCaption(f)].filter(Boolean).join("\n\n");
+  };
+
+  function mergeZernio(r) {
+    if (!st.result || !r.platforms?.length) return;
+    st.result.platforms = [...r.platforms.map((p) => ({ ...p, source: "zernio" })), ...st.result.platforms.filter((e) => e.source !== "zernio")];
+  }
+
+  // Instagram through Dave's own Meta app: create the post, wait for Instagram to process it, then publish.
+  async function postInstagram(a, url, entry) {
+    try {
+      entry.status = "processing"; drawActions();
+      if (demo) { await sleep(500); entry.status = "published"; drawActions(); return; }
+      const { containerId } = await api("ig-create", { mediaUrl: url, mediaType: st.mediaType, caption: fullCaption(field(a.id)) });
+      for (let i = 0; ; i++) {
+        const s = await api("ig-status", { containerId });
+        if (s.status === "FINISHED") break;
+        if (s.status === "ERROR" || s.status === "EXPIRED") throw new Error(`Instagram couldn't process the file${s.detail ? `: ${s.detail}` : "."}`);
+        if (i >= 75) throw new Error("Instagram is still processing after 5 minutes. Check the Instagram app in a bit.");
+        await sleep(4000);
+      }
+      const done = await api("ig-publish", { containerId });
+      Object.assign(entry, { status: "published", url: done.url });
+    } catch (err) { Object.assign(entry, { status: "failed", error: err.message }); }
+    drawActions();
+  }
+
   async function publish() {
-    const issues = problems({ accounts: st.accounts ?? [], selected: st.selected, fields: st.fields, mediaType: st.mediaType });
+    const issues = problems({ accounts: st.accounts ?? [], selected: st.selected, fields: st.fields, mediaType: st.mediaType, when: st.when });
     if (issues.length) { drawActions(issues); return; }
     if (st.when === "later" && !st.at) { drawActions(["Pick a date and time."]); return; }
-    st.busy = "uploading"; st.progress = 0; st.result = null; drawActions();
+    const picked = st.selected.map(acct).filter(Boolean);
+    const viaZernio = picked.filter((a) => !a.direct && !a.manual), direct = picked.filter((a) => a.direct), manual = picked.filter((a) => a.manual);
+    const when = st.when === "later" ? new Date(st.at).toISOString() : null;
+    const entries = [
+      ...viaZernio.map((a) => ({ key: a.id, source: "zernio", platform: a.platform, status: "pending" })),
+      ...direct.map((a) => ({ key: a.id, source: "direct", platform: a.platform, status: "pending" })),
+      ...manual.map((a) => ({ key: a.id, source: "manual", platform: a.platform, status: "copy", text: manualText(a), open: MANUAL[a.platform] })),
+    ];
+    st.result = null; st.progress = 0;
     try {
-      const url = await upload();
-      st.busy = "publishing"; drawActions();
-      const targets = st.selected.map((id) => {
-        const a = acct(id), f = field(id);
-        return { platform: a.platform, accountId: id, caption: f.caption, title: f.title, hashtags: f.hashtags, boardId: f.boardId,
-          link: f.link, visibility: f.visibility, madeForKids: !!f.madeForKids, privacy: f.privacy,
-          allowComment: f.allowComment, allowDuet: f.allowDuet, allowStitch: f.allowStitch, consent: !!f.consent, firstComment: f.firstComment };
-      });
-      const when = st.when === "later" ? new Date(st.at).toISOString() : null;
-      const result = demo
-        ? { id: "demo", status: when ? "scheduled" : "published", scheduledFor: when, platforms: targets.map((t) => ({ platform: t.platform, status: when ? "scheduled" : "published", url: null })) }
-        : await api("publish", { targets, media: [{ url, type: st.mediaType }], when, description: st.about });
-      st.result = result; st.busy = "";
-      toast?.(when ? "Scheduled!" : "Posting now…");
-      drawActions();
-      if (!demo && !when && result.id) pollStatus(result.id);
+      let url = null;
+      if (viaZernio.length || direct.length) { st.busy = "uploading"; drawActions(); url = await upload(direct.length > 0); }
+      st.busy = "publishing"; st.result = { id: null, scheduledFor: when, platforms: entries }; drawActions();
+      if (viaZernio.length) {
+        try {
+          const targets = viaZernio.map((a) => {
+            const f = field(a.id);
+            return { platform: a.platform, accountId: a.id, caption: f.caption, title: f.title, hashtags: f.hashtags, boardId: f.boardId,
+              link: f.link, visibility: f.visibility, madeForKids: !!f.madeForKids, privacy: f.privacy,
+              allowComment: f.allowComment, allowDuet: f.allowDuet, allowStitch: f.allowStitch, consent: !!f.consent, firstComment: f.firstComment };
+          });
+          const r = demo
+            ? { id: "demo", platforms: targets.map((t) => ({ platform: t.platform, status: when ? "scheduled" : "published", url: null })) }
+            : await api("publish", { targets, media: [{ url, type: st.mediaType }], when, description: st.about });
+          st.result.id = r.id; mergeZernio(r);
+        } catch (err) {
+          st.result.platforms.filter((e) => e.source === "zernio").forEach((e) => Object.assign(e, { status: "failed", error: err.message }));
+        }
+        drawActions();
+      }
+      for (const a of direct) await postInstagram(a, url, st.result.platforms.find((e) => e.key === a.id));
+      st.busy = ""; drawActions();
+      toast?.(when ? "Scheduled!" : manual.length === picked.length ? "Text ready to copy." : "Posting…");
+      if (!demo && !when && st.result.id) pollStatus(st.result.id);
       loadRecent();
     } catch (err) {
-      st.busy = ""; drawActions([err.message]);
+      st.busy = ""; st.result = null; drawActions([err.message]);
     }
   }
 
@@ -259,7 +336,7 @@ export function createPoster({ root, demo, endpoint, supabaseUrl, anonKey, getTo
     try {
       const r = await api("status", { postId: id });
       if (st.result?.id !== id) return;
-      st.result = r; drawActions();
+      mergeZernio(r); drawActions();
       if (r.platforms.some((p) => ["pending", "publishing", "processing"].includes(p.status))) pollStatus(id, tries + 1);
       else loadRecent();
     } catch { pollStatus(id, tries + 1); }
@@ -322,12 +399,11 @@ export function createPoster({ root, demo, endpoint, supabaseUrl, anonKey, getTo
   function accountsHtml() {
     if (st.accounts === null) return `<p class="muted">Loading your accounts…</p>`;
     if (st.loadError) return `<p class="pz-err">${esc(st.loadError)}</p><button type="button" class="btn sm" id="pz-retry">Try again</button>`;
-    if (!st.accounts.length) return `<p class="muted">No accounts connected yet. Connect them at zernio.com (Accounts), then reopen this page.</p>`;
-    return `<div class="pz-accs">${st.accounts.map((a) => `
+    return `${st.warnings.length ? `<ul class="pz-warn">${st.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}<div class="pz-accs">${st.accounts.map((a) => `
       <label class="pz-acc ${st.selected.includes(a.id) ? "on" : ""}">
         <input type="checkbox" data-acc="${esc(a.id)}" ${st.selected.includes(a.id) ? "checked" : ""}>
         ${tile(a.platform)}
-        <span><b>${esc(PLATFORM_INFO[a.platform]?.name ?? a.platform)}</b><small class="muted">@${esc(a.username || a.name)}</small></span>
+        <span><b>${esc(PLATFORM_INFO[a.platform]?.name ?? a.platform)}</b><small class="muted">${a.manual ? "copy & paste" : `@${esc(a.username || a.name)}`}</small></span>
       </label>`).join("")}</div>`;
   }
 
@@ -338,7 +414,9 @@ export function createPoster({ root, demo, endpoint, supabaseUrl, anonKey, getTo
       <label>Title <span class="muted pz-count">${f.title.length}/100</span><input data-f="title" value="${esc(f.title)}" maxlength="100" placeholder="Hooky title with the product name"></label>
       <div class="pz-row"><label>Visibility<select data-f="visibility">${["public", "unlisted", "private"].map((v) => `<option ${f.visibility === v ? "selected" : ""}>${v}</option>`).join("")}</select></label>
       <label class="pz-check"><input type="checkbox" data-f="madeForKids" ${f.madeForKids ? "checked" : ""}> Made for kids</label></div>`);
-    if (a.platform === "pinterest") {
+    if (a.platform === "pinterest" && a.manual) extra.push(`
+      <label>Pin title<input data-f="title" value="${esc(f.title)}" maxlength="100" placeholder="Searchable title"></label>`);
+    if (a.platform === "pinterest" && !a.manual) {
       const boards = st.boards[id];
       extra.push(`
       <label>Pin title<input data-f="title" value="${esc(f.title)}" maxlength="100" placeholder="Searchable title"></label>
@@ -356,12 +434,13 @@ export function createPoster({ root, demo, endpoint, supabaseUrl, anonKey, getTo
       </div></div>
       <label class="pz-check pz-consent"><input type="checkbox" data-f="consent" ${f.consent ? "checked" : ""}><span>I've previewed this post and agree to TikTok's <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener">Music Usage Confirmation</a>.</span></label>`);
     }
-    if (["instagram", "youtube", "facebook", "linkedin"].includes(a.platform)) extra.push(`
+    if (!a.direct && !a.manual && ["instagram", "youtube", "facebook", "linkedin"].includes(a.platform)) extra.push(`
       <label>First comment <span class="muted">(optional, good for links)</span><input data-f="firstComment" value="${esc(f.firstComment ?? "")}" placeholder="Full review: techbydave.com"></label>`);
     return `
       <details class="pz-ed" data-id="${esc(id)}" open>
-        <summary>${tile(a.platform)}<b>${esc(info.name ?? a.platform)}</b><span class="muted">@${esc(a.username || a.name)}</span>
+        <summary>${tile(a.platform)}<b>${esc(info.name ?? a.platform)}</b><span class="muted">${a.manual ? "copy & paste" : `@${esc(a.username || a.name)}`}</span>
           <span class="pz-count ${info.limit && len > info.limit ? "over" : ""}">${len}${info.limit ? `/${info.limit}` : ""}</span></summary>
+        ${a.manual ? `<p class="muted pz-manual">${esc(info.name)} isn't connected, so you post this one yourself. After you tap Post, you get this text to copy.</p>` : ""}
         <label>${a.platform === "youtube" ? "Description" : "Caption"}<textarea data-f="caption" rows="${a.platform === "twitter" ? 3 : 4}">${esc(f.caption)}</textarea></label>
         <label>Hashtags<input data-f="hashtags" value="${esc(f.hashtags)}" placeholder="#techbydave #gadgets"></label>
         ${extra.join("")}
@@ -402,10 +481,17 @@ export function createPoster({ root, demo, endpoint, supabaseUrl, anonKey, getTo
       ${busy ? `<div class="pz-progress"><i style="width:${st.busy === "uploading" ? Math.round(st.progress * 100) : 100}%"></i></div><p class="muted">${busy}</p>` : ""}
       <button type="button" class="btn primary block" id="pz-go" ${st.busy ? "disabled" : ""}>${st.when === "later" ? "Schedule post" : "Post now"}${st.selected.length ? ` to ${st.selected.length} account${st.selected.length > 1 ? "s" : ""}` : ""}</button>
       ${r ? `<div class="pz-result">
-        <b>${r.status === "scheduled" ? `Scheduled for ${esc(new Date(r.scheduledFor).toLocaleString())}` : "Post status"}</b>
-        <ul>${r.platforms.map((p) => `<li>${tile(p.platform)}<span>${esc(PLATFORM_INFO[p.platform]?.name ?? p.platform)}</span>
-          <span class="pz-pill s-${esc(p.status)}">${esc(p.status)}</span>${p.url ? ` <a href="${esc(p.url)}" target="_blank" rel="noopener">View ↗</a>` : ""}${p.error ? `<small class="pz-err">${esc(p.error)}</small>` : ""}</li>`).join("")}</ul>
-        <button type="button" class="btn sm" id="pz-new">Start a new post</button></div>` : ""}`;
+        <b>${r.scheduledFor ? `Scheduled for ${esc(new Date(r.scheduledFor).toLocaleString())}` : "Post status"}</b>
+        <ul>${r.platforms.map((p, i) => { const name = esc(PLATFORM_INFO[p.platform]?.name ?? p.platform); return `<li>${tile(p.platform)}<span>${name}</span>
+          ${p.source === "manual"
+            ? `<button type="button" class="btn sm" data-copy="${i}">Copy text</button> <a href="${esc(p.open)}" target="_blank" rel="noopener">Open ${name} ↗</a>`
+            : `<span class="pz-pill s-${esc(p.status)}">${esc(p.status)}</span>${p.url ? ` <a href="${esc(p.url)}" target="_blank" rel="noopener">View ↗</a>` : ""}`}
+          ${p.error ? `<small class="pz-err">${esc(p.error)}</small>` : ""}</li>`; }).join("")}</ul>
+        ${st.busy ? "" : `<button type="button" class="btn sm" id="pz-new">Start a new post</button>`}</div>` : ""}`;
+    box.querySelectorAll("[data-copy]").forEach((el) => el.addEventListener("click", async () => {
+      const text = st.result?.platforms[Number(el.dataset.copy)]?.text ?? "";
+      try { await navigator.clipboard.writeText(text); el.textContent = "Copied ✓"; } catch { toast?.("Couldn't copy. Select the text in the box above instead."); }
+    }));
     box.querySelectorAll('input[name="pz-when"]').forEach((el) => el.addEventListener("change", () => { st.when = el.value; drawActions(); }));
     box.querySelector("#pz-at")?.addEventListener("change", (e) => { st.at = e.target.value; });
     box.querySelector("#pz-go").addEventListener("click", publish);

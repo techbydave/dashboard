@@ -108,7 +108,7 @@ test("chat stream parser collects text deltas across chunks", () => {
   assert.equal(rest, "");
 });
 
-import { problems, costNote, hashtagText, fullCaption } from "../assets/post.js";
+import { problems, costNote, hashtagText, fullCaption, withManual } from "../assets/post.js";
 
 test("post page: hashtags are cleaned and de-duplicated", () => {
   assert.equal(hashtagText("#tech, Tech  iphone ##apple bad-tag"), "#tech #iphone #apple #badtag");
@@ -135,4 +135,15 @@ test("post page: X cost warning mentions links", () => {
   assert.equal(costNote(accounts, ["i"], {}), "");
   assert.match(costNote(accounts, ["x"], { x: { caption: "hi" } }), /0\.015/);
   assert.match(costNote(accounts, ["x"], { x: { caption: "read techbydave.com" } }), /0\.20/);
+});
+
+test("post page: unconnected X and Pinterest become copy-and-paste accounts", () => {
+  const list = withManual([{ id: "t", platform: "tiktok" }, { id: "direct-instagram", platform: "instagram", direct: true }]);
+  assert.deepEqual(list.filter((a) => a.manual).map((a) => a.platform), ["twitter", "pinterest"]);
+  assert.equal(withManual([{ id: "x1", platform: "twitter" }]).filter((a) => a.platform === "twitter").length, 1);
+  // a manual Pinterest needs no board; direct Instagram can't be scheduled; manual X has no fee note
+  assert.deepEqual(problems({ accounts: list, selected: ["manual-pinterest"], fields: {}, mediaType: "image" }), []);
+  assert.ok(problems({ accounts: list, selected: ["direct-instagram"], fields: {}, mediaType: "image", when: "later" })[0].startsWith("Instagram can only post right away"));
+  assert.deepEqual(problems({ accounts: list, selected: ["direct-instagram"], fields: {}, mediaType: "image" }), []);
+  assert.equal(costNote(list, ["manual-twitter"], {}), "");
 });
