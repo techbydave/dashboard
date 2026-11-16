@@ -143,3 +143,24 @@ test("post page: no copy-and-paste accounts are added (X and Pinterest removed)"
   assert.ok(problems({ accounts: list, selected: ["direct-instagram"], fields: {}, mediaType: "image", when: "later" })[0].startsWith("Instagram can only post right away"));
   assert.deepEqual(problems({ accounts: list, selected: ["direct-instagram"], fields: {}, mediaType: "image" }), []);
 });
+
+import { upcoming, whenLabel } from "../assets/post.js";
+
+test("upcoming keeps only scheduled posts, soonest first", () => {
+  const posts = [
+    { id: "a", status: "published", scheduledFor: "2026-11-17T10:00:00Z" },
+    { id: "b", status: "scheduled", scheduledFor: "2026-11-20T23:00:00Z" },
+    { id: "c", status: "scheduled", scheduledFor: "2026-11-18T23:00:00Z" },
+    { id: "d", status: "scheduled", scheduledFor: null },
+  ];
+  assert.deepEqual(upcoming(posts).map((p) => p.id), ["c", "b", "d"]);
+  assert.deepEqual(upcoming(undefined), []);
+});
+
+test("whenLabel says today, tomorrow or the date", () => {
+  const now = new Date(2026, 10, 16, 13, 0);
+  assert.match(whenLabel(new Date(2026, 10, 16, 18, 0).toISOString(), now), /^Today, /);
+  assert.match(whenLabel(new Date(2026, 10, 17, 9, 30).toISOString(), now), /^Tomorrow, /);
+  assert.doesNotMatch(whenLabel(new Date(2026, 10, 20, 18, 0).toISOString(), now), /^(Today|Tomorrow)/);
+  assert.equal(whenLabel("nope", now), "No time set");
+});

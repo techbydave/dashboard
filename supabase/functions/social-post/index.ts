@@ -305,6 +305,26 @@ export async function handle(req: Request): Promise<Response> {
         const data = await zernio(`/posts/${id(body.postId)}`);
         return json(summarize(data?.post ?? data), 200, h);
       }
+      case "scheduled": {
+        let data: any;
+        try { data = await zernio("/posts?status=scheduled&limit=50"); }
+        catch (err) {
+          if (!(err instanceof HttpError) || err.status !== 400) throw err;
+          data = await zernio("/posts?limit=50"); // older API without the status filter
+        }
+        const list = (data?.posts ?? data?.data ?? []).map(summarize).filter((p: any) => p.status === "scheduled");
+        list.sort((a: any, b: any) => String(a.scheduledFor ?? "").localeCompare(String(b.scheduledFor ?? "")));
+        return json({ posts: list }, 200, h);
+      }
+      case "cancel": {
+        const postId = id(body.postId);
+        const current = summarize((await zernio(`/posts/${postId}`))?.post);
+        if (current.status === "published" || current.status === "partial")
+          throw new HttpError(409, "This post has already gone out, so it can't be cancelled. Delete it in the app instead.");
+        if (current.status === "publishing") throw new HttpError(409, "This post is going out right now, so it's too late to cancel.");
+        await zernio(`/posts/${postId}`, { method: "DELETE" });
+        return json({ cancelled: postId }, 200, h);
+      }
       case "recent": {
         const data = await zernio("/posts?limit=10");
         const list = data?.posts ?? data?.data ?? [];

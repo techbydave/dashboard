@@ -28,6 +28,25 @@ const HANDLE = "techby_dave";
 const MANUAL = {};
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Scheduled posts, soonest first. Posts whose time has passed stay listed (they may still be going out).
+export function upcoming(posts, now = Date.now()) {
+  return (posts ?? [])
+    .filter((p) => p && p.status === "scheduled")
+    .sort((a, b) => (Date.parse(a.scheduledFor) || Infinity) - (Date.parse(b.scheduledFor) || Infinity));
+}
+
+// "Today, 6:00 PM" / "Tomorrow, 9:30 AM" / "Fri, Nov 20, 6:00 PM"
+export function whenLabel(iso, now = new Date()) {
+  const d = new Date(iso);
+  if (isNaN(d)) return "No time set";
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const day0 = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day0(d) - day0(now)) / 86400000);
+  if (diff === 0) return `Today, ${time}`;
+  if (diff === 1) return `Tomorrow, ${time}`;
+  return `${d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}, ${time}`;
+}
+
 export function withManual(accounts) {
   const out = [...accounts];
   for (const platform of Object.keys(MANUAL)) {
@@ -146,6 +165,7 @@ export function createPoster({ root, demo, endpoint, supabaseUrl, anonKey, getTo
     accounts: null, loadError: "", warnings: [], selected: [], fields: {}, boards: {}, tiktok: {},
     file: null, mediaType: null, preview: null, frame: null, about: "",
     when: "now", at: "", busy: "", progress: 0, result: null, recent: [], suggesting: false,
+    scheduled: null, schedError: "", confirming: null, cancelling: null,
   };
 
   async function api(action, body = {}) {
@@ -175,6 +195,27 @@ export function createPoster({ root, demo, endpoint, supabaseUrl, anonKey, getTo
     } catch (err) { st.accounts = []; st.loadError = err.message; }
     draw();
     loadRecent();
+    loadScheduled();
+  }
+  async function loadScheduled() {
+    if (demo) {
+      st.scheduled = [{ id: "d1", status: "scheduled", content: "HomePod mini 2: worth $149 without Siri AI? #homepodmini #shorts",
+        scheduledFor: new Date(Date.now() + 26 * 3600000).toISOString(), platforms: [{ platform: "tiktok" }, { platform: "youtube" }] }];
+      drawScheduled(); return;
+    }
+    try { st.scheduled = upcoming((await api("scheduled")).posts); st.schedError = ""; }
+    catch (err) { st.scheduled = st.scheduled ?? []; st.schedError = err.message; }
+    drawScheduled();
+  }
+  async function cancelPost(id) {
+    st.cancelling = id; st.confirming = null; drawScheduled();
+    try {
+      if (!demo) await api("cancel", { postId: id });
+      st.scheduled = (st.scheduled ?? []).filter((p) => p.id !== id);
+      toast?.("Cancelled. It won't be posted.");
+      loadRecent();
+    } catch (err) { toast?.(err.message); loadScheduled(); }
+    st.cancelling = null; drawScheduled();
   }
   async function loadRecent() {
     if (demo) return;
@@ -326,6 +367,7 @@ export function createPoster({ root, demo, endpoint, supabaseUrl, anonKey, getTo
       toast?.(when ? "Scheduled!" : manual.length === picked.length ? "Text ready to copy." : "Posting…");
       if (!demo && !when && st.result.id) pollStatus(st.result.id);
       loadRecent();
+      if (when) loadScheduled();
     } catch (err) {
       st.busy = ""; st.result = null; drawActions([err.message]);
     }
@@ -375,6 +417,10 @@ export function createPoster({ root, demo, endpoint, supabaseUrl, anonKey, getTo
             <div id="pz-editors"></div>
           </div>
           <div class="pz-panel pz-a-actions" id="pz-actions"></div>
+          <div class="pz-panel pz-a-scheduled">
+            <div class="pz-head"><h3>Scheduled</h3><button type="button" class="linkish" id="pz-sched-refresh">Refresh</button></div>
+            <div id="pz-scheduled"></div>
+          </div>
           <div class="pz-panel pz-a-recent" id="pz-recent-wrap" ${st.recent.length ? "" : "hidden"}><h3>Recent posts</h3><div id="pz-recent"></div></div>
       </div>`;
     const $ = (s) => root.querySelector(s);
@@ -394,12 +440,50 @@ export function createPoster({ root, demo, endpoint, supabaseUrl, anonKey, getTo
       drawActions();
     });
     root.querySelector("#pz-accounts").addEventListener("click", (e) => { if (e.target.id === "pz-retry") { st.accounts = null; draw(); loadAccounts(); } });
-    drawEditors(); drawActions(); drawRecent();
+    $("#pz-sched-refresh").addEventListener("click", () => { st.scheduled = null; drawScheduled(); loadScheduled(); });
+    $("#pz-scheduled").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-act]"); if (!b) return;
+      const id = b.dataset.id;
+      if (b.dataset.act === "ask") st.confirming = id;
+      else if (b.dataset.act === "keep") st.confirming = null;
+      else if (b.dataset.act === "yes") { cancelPost(id); return; }
+      drawScheduled();
+    });
+    drawEditors(); drawActions(); drawRecent(); drawScheduled();
+  }
+
+  function drawScheduled() {
+    const box = root.querySelector("#pz-scheduled"); if (!box) return;
+    if (st.scheduled === null) { box.innerHTML = `<p class="muted">Loading…</p>`; return; }
+    if (st.schedError && !st.scheduled.length) { box.innerHTML = `<p class="form-msg">${esc(st.schedError)}</p>`; return; }
+    if (!st.scheduled.length) { box.innerHTML = `<p class="muted">Nothing scheduled. Posts you schedule show up here, and you can cancel them before they go out.</p>`; return; }
+    box.innerHTML = st.scheduled.map((p) => {
+      const busy = st.cancelling === p.id, asking = st.confirming === p.id;
+      const thumb = p.media?.[0]?.url && p.media[0].type !== "video" ? `<img class="pz-sched-thumb" src="${esc(p.media[0].url)}" alt="">` : "";
+      return `
+      <div class="pz-sched ${asking ? "asking" : ""}">
+        <div class="pz-sched-main">
+          ${thumb}
+          <div class="pz-sched-text">
+            <b>${esc(whenLabel(p.scheduledFor))}</b>
+            <p>${esc(p.content || "(no caption)")}</p>
+            <div class="pz-recent-plats">${(p.platforms ?? []).map((x) => `<span title="${esc(PLATFORM_INFO[x.platform]?.name ?? x.platform)}">${tile(x.platform)}</span>`).join("")}</div>
+          </div>
+        </div>
+        <div class="pz-sched-actions">
+          ${busy ? `<span class="muted">Cancelling…</span>`
+            : asking ? `<span class="pz-sched-q">Cancel this post?</span>
+                <button type="button" class="btn sm pz-danger" data-act="yes" data-id="${esc(p.id)}">Yes, cancel it</button>
+                <button type="button" class="btn sm" data-act="keep" data-id="${esc(p.id)}">Keep it</button>`
+            : `<button type="button" class="btn sm" data-act="ask" data-id="${esc(p.id)}">Cancel</button>`}
+        </div>
+      </div>`;
+    }).join("");
   }
 
   function accountsHtml() {
     if (st.accounts === null) return `<p class="muted">Loading your accounts…</p>`;
-    if (st.loadError) return `<p class="pz-err">${esc(st.loadError)}</p><button type="button" class="btn sm" id="pz-retry">Try again</button>`;
+    if (st.loadError) return `<p class="form-msg">${esc(st.loadError)}</p><button type="button" class="btn sm" id="pz-retry">Try again</button>`;
     return `${st.warnings.length ? `<ul class="pz-warn">${st.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}<div class="pz-accs">${st.accounts.map((a) => `
       <label class="pz-acc ${st.selected.includes(a.id) ? "on" : ""}">
         <input type="checkbox" data-acc="${esc(a.id)}" ${st.selected.includes(a.id) ? "checked" : ""}>
