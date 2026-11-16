@@ -24,7 +24,8 @@ const PRIVACY_LABELS = {
 const MAX_FALLBACK = 50 * 1024 * 1024;
 const HANDLE = "techby_dave";
 // Platforms that aren't connected get a "copy and paste" card: the page writes the text, Dave posts it himself.
-const MANUAL = { twitter: "https://x.com/compose/post", pinterest: "https://www.pinterest.com/pin-creation-tool/" };
+// Add a platform here (e.g. twitter: "https://x.com/compose/post") to show it as a copy-and-paste card.
+const MANUAL = {};
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function withManual(accounts) {

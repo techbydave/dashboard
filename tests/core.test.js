@@ -137,13 +137,9 @@ test("post page: X cost warning mentions links", () => {
   assert.match(costNote(accounts, ["x"], { x: { caption: "read techbydave.com" } }), /0\.20/);
 });
 
-test("post page: unconnected X and Pinterest become copy-and-paste accounts", () => {
+test("post page: no copy-and-paste accounts are added (X and Pinterest removed)", () => {
   const list = withManual([{ id: "t", platform: "tiktok" }, { id: "direct-instagram", platform: "instagram", direct: true }]);
-  assert.deepEqual(list.filter((a) => a.manual).map((a) => a.platform), ["twitter", "pinterest"]);
-  assert.equal(withManual([{ id: "x1", platform: "twitter" }]).filter((a) => a.platform === "twitter").length, 1);
-  // a manual Pinterest needs no board; direct Instagram can't be scheduled; manual X has no fee note
-  assert.deepEqual(problems({ accounts: list, selected: ["manual-pinterest"], fields: {}, mediaType: "image" }), []);
+  assert.deepEqual(list.map((a) => a.platform), ["tiktok", "instagram"]);
   assert.ok(problems({ accounts: list, selected: ["direct-instagram"], fields: {}, mediaType: "image", when: "later" })[0].startsWith("Instagram can only post right away"));
   assert.deepEqual(problems({ accounts: list, selected: ["direct-instagram"], fields: {}, mediaType: "image" }), []);
-  assert.equal(costNote(list, ["manual-twitter"], {}), "");
 });

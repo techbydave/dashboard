@@ -116,6 +116,6 @@ Setup (once):
 3. Deploy `supabase/functions/social-post/index.ts` as a function named `social-post`, with "Verify JWT with legacy secret" off.
 4. Run the "Backup upload bucket" part of `supabase/schema.sql`.
 
-**The $0 setup:** connect only TikTok and YouTube in Zernio (its two free accounts). Instagram then posts directly through your own Meta app: add `IG_ACCESS_TOKEN` (a token with `instagram_content_publish`) to Supabase secrets. Direct Instagram posts go out right away and can't be scheduled. X and Pinterest appear as "copy & paste" accounts: the page writes the text and gives you a Copy button, and you post those yourself.
+**The $0 setup:** connect only TikTok and YouTube in Zernio (its two free accounts). Instagram then posts directly through your own Meta app: add `IG_ACCESS_TOKEN` (a token with `instagram_content_publish`) to Supabase secrets. Direct Instagram posts go out right away and can't be scheduled.
 
 Cost: the first 2 connected accounts are free, then $6/month each. X also bills about $0.015 per post ($0.20 if it contains a link); the page warns you.
