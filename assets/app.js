@@ -10,6 +10,8 @@ import { DEAL_STAGES, DEAL_KINDS, CLOSED, dealAlert, dealTotals, nextStage, mone
 import { GOAL_KINDS, DEFAULT_GOALS, weekStart, goalProgress } from "./goals.js";
 import { createDraftEditor } from "./needsyou.js";
 import { createNotes } from "./notes.js";
+import { createLearn } from "./learn.js";
+import { sessionAt, session } from "./learn-plan.js";
 import { logoTile } from "./logos.js";
 import { createChat } from "./chat.js";
 import { createPoster } from "./post.js";
@@ -93,6 +95,8 @@ class DemoStore {
   async saveGoals(list) { lsSet("tbd-demo-goals", list); return list; }
   async deleteGoal(id) { lsSet("tbd-demo-goals", (await this.goals()).filter((x) => x.id !== id)); }
   async ticks() { return lsGet("tbd-demo-ticks", []); }
+  async learnTicks() { return lsGet("tbd-demo-learn", []); }
+  async setLearnTick(day, on) { const all = new Set(lsGet("tbd-demo-learn", [])); if (on) all.add(day); else all.delete(day); lsSet("tbd-demo-learn", [...all]); }
   async notes() { return lsGet("tbd-demo-notes", null) ?? [{ id: "n1", title: "Welcome to Notes", pinned: true, updated_at: new Date().toISOString(), body: "# Your notebook\n- Plans, scripts, DMs, ideas\n- **Bold** and lists work\n\n```\nCode blocks get a Copy button, handy for DMs.\n```" }]; }
   async saveNote(n) { const all = (await this.notes()).filter((x) => x.id !== n.id); all.push(n); lsSet("tbd-demo-notes", all); return n; }
   async deleteNote(id) { lsSet("tbd-demo-notes", (await this.notes()).filter((x) => x.id !== id)); }
@@ -149,6 +153,15 @@ class LiveStore {
     return data;
   }
   async saveTick(t) { const { data, error } = await this.db.from("goal_ticks").upsert(t).select().single(); if (error) throw error; return data; }
+  async learnTicks() {
+    const { data, error } = await this.db.from("learn_ticks").select("day");
+    if (error) { if (missingTable(error)) throw new Error("Learn needs a quick database update (see the README)."); throw error; }
+    return data.map((r) => r.day);
+  }
+  async setLearnTick(day, on) {
+    const { error } = on ? await this.db.from("learn_ticks").upsert({ day }) : await this.db.from("learn_ticks").delete().eq("day", day);
+    if (error) throw error;
+  }
   async notes() {
     const { data, error } = await this.db.from("notes").select("*").order("updated_at", { ascending: false });
     if (error) { if (missingTable(error)) throw new Error("Notes need a quick database update (see the README)."); throw error; }
@@ -497,7 +510,12 @@ function renderNeedsYou(today) {
   const drafts = state.content.filter((e) => e.type === "draft").sort((a, b) => draftTodo(a) - draftTodo(b) || b.day.localeCompare(a.day));
   const deals = state.deals.map((d) => ({ d, a: dealAlert(d, today) })).filter((x) => x.a)
     .sort((x, y) => ["late", "soon", "quiet"].indexOf(x.a.level) - ["late", "soon", "quiet"].indexOf(y.a.level));
+  // Today's coding lesson, until it's ticked off.
+  const li = sessionAt(today), lesson = li === null ? null : session(li);
+  const learn = lesson && !(state.learnDone || []).includes(today)
+    ? [`<a class="ny-item" href="#learn"><span class="ny-ic learn" aria-hidden="true">{ }</span><span class="ny-text"><b>Learn: ${esc(lesson.phase.name)} · ${esc(lesson.title)}</b><span>${esc(lesson.task)}</span></span></a>`] : [];
   const items = [
+    ...learn,
     ...deals.map(({ d, a }) => `<button class="ny-item ${a.level}" data-deal="${esc(d.id)}"><span class="ny-ic deal" aria-hidden="true">$</span>
       <span class="ny-text"><b>${esc(d.brand)}${d.product ? ` · ${esc(d.product)}` : ""}</b><span>${esc(a.text)}</span></span></button>`),
     ...drafts.map((d) => `<button class="ny-item ${draftTodo(d) ? "" : "ready"}" data-draft="${esc(d.id)}"><span class="ny-ic draft" aria-hidden="true">${draftTodo(d) ? "✎" : "✓"}</span>
@@ -823,7 +841,7 @@ $("#range").addEventListener("click", (e) => {
 });
 function syncRange() { for (const b of $("#range").children) b.setAttribute("aria-checked", String(Number(b.dataset.days) === state.days)); }
 
-const TITLES = { overview: null, search: "Google Search", calendar: "Content calendar", ideas: "Ideas board", deals: "Brand deals", notes: "Notes", ask: "TechByDave AI", post: "Post to socials" };
+const TITLES = { overview: null, search: "Google Search", calendar: "Content calendar", ideas: "Ideas board", deals: "Brand deals", notes: "Notes", learn: "Learn to code", ask: "TechByDave AI", post: "Post to socials" };
 function route() {
   const v = (location.hash || "#overview").slice(1);
   state.view = TITLES.hasOwnProperty(v) ? v : "overview";
@@ -844,6 +862,7 @@ function renderAll() {
   if (state.view === "ideas") renderBoard();
   if (state.view === "deals") renderDeals();
   if (state.view === "notes") renderNotes();
+  if (state.view === "learn") renderLearn();
   if (state.view === "ask") renderAsk();
   if (state.view === "post") renderPost();
 }
@@ -851,6 +870,16 @@ function renderAll() {
 // ---------------------------------------------------------------------------
 // TechByDave AI chat
 // ---------------------------------------------------------------------------
+let learnUi = null, learnDemo = null;
+async function renderLearn() {
+  if (!learnUi || learnDemo !== store.demo) {
+    learnDemo = store.demo;
+    learnUi = createLearn({ root: $("#learn-root"), store, toast, onChange: (days) => { state.learnDone = days; } });
+  }
+  try { await learnUi.load(todayIn(TZ)); }
+  catch (err) { $("#learn-root").innerHTML = `<div class="panel"><p class="muted">${esc(err.message)}</p></div>`; learnUi = null; }
+}
+
 let notesUi = null, notesDemo = null;
 function renderNotes() {
   if (notesUi && notesDemo === store.demo) return;
@@ -1002,8 +1031,9 @@ async function enter() {
   if (!(await store.isAdmin())) { await store.signOut(); return showLogin("This account doesn't have access to the dashboard."); }
   $("#boot").hidden = false; $("#boot").textContent = "Loading your numbers…";
   const from = addDays(todayIn(TZ), -200);
-  const [rows, ideas, searchTop, deals, goals, ticks] = await Promise.all([store.metrics(from), store.ideas(), store.searchTop(),
-    store.deals(), store.goals(), store.ticks(weekStart(todayIn(TZ)))]);
+  const [rows, ideas, searchTop, deals, goals, ticks, learnDone] = await Promise.all([store.metrics(from), store.ideas(), store.searchTop(),
+    store.deals(), store.goals(), store.ticks(weekStart(todayIn(TZ))), store.learnTicks().catch(() => [])]);
+  state.learnDone = learnDone;
   state.rows = rows; state.ideas = ideas; state.searchTop = searchTop; state.deals = deals; state.goals = goals; state.ticks = ticks;
   $("#who-email").textContent = state.user.email || "";
   $("#demo-note").hidden = !store.demo;

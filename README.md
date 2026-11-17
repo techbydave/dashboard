@@ -138,6 +138,14 @@ Setup (once): run the "Brand deals" and "Weekly goals" parts at the end of `supa
 
 The **Notes** page is a notebook for plans, scripts and DMs. It understands simple formatting (`#` headings, `-` lists, `**bold**`), and anything inside a ``` block gets a **Copy** button, which is handy for messages you paste into Instagram. Notes save as you type, can be pinned to the top, and are searchable. Setup: run the "Notes" part at the end of `supabase/schema.sql`.
 
+## Learn to code
+
+An 8-month, 1-hour-a-day (Monday to Friday) plan: HTML & CSS, JavaScript, SQL, Python, Swift, then a final
+project. It starts Monday, Nov 23, 2026. The lessons, free tools and videos live in `assets/learn-plan.js`;
+tick a day off and it's saved in the `learn_ticks` table. Today's lesson also shows in "Needs you" until it's done.
+If the Learn page says it needs a database update, run the "Learn to code" block at the end of `supabase/schema.sql`
+in the Supabase SQL editor.
+
 ## Fill in drafts from the dashboard
 
 Tap a draft in **Needs you** (or the calendar) to fill in its blanks: your take, verdict, photo and the rest. Photos are resized and added to the blog's `images/` folder. When nothing's left, the draft goes live at the next 9:00am publish, or tap **Publish now**.

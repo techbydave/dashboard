@@ -298,3 +298,38 @@ test("notes sort pinned first, then newest, and preview skips headings", () => {
   assert.equal(snippet("# Title\n\n**Day 1:** DM [PITAKA](https://x.y)"), "Day 1: DM PITAKA");
   assert.equal(snippet(""), "");
 });
+
+import { WEEKS, PHASES, TOTAL, sessionDate, sessionAt, session, currentSession, streak, missed, phaseProgress } from "../assets/learn-plan.js";
+
+test("learn plan: 35 weeks of five days, phases cover every week", () => {
+  assert.equal(WEEKS.length, 35);
+  WEEKS.forEach(([title, days]) => { assert.ok(title); assert.equal(days.length, 5); });
+  for (let w = 1; w <= 35; w++) assert.equal(PHASES.filter((p) => w >= p.weeks[0] && w <= p.weeks[1]).length, 1, `week ${w}`);
+  assert.equal(TOTAL, 175);
+});
+
+test("learn plan: dates map to weekdays from Mon Nov 23 2026", () => {
+  assert.equal(sessionDate(0), "2026-11-23");
+  assert.equal(sessionDate(4), "2026-11-27");
+  assert.equal(sessionDate(5), "2026-11-30");
+  assert.equal(sessionDate(TOTAL - 1), "2027-07-23");
+  assert.equal(sessionAt("2026-11-28"), null); // Saturday
+  assert.equal(sessionAt("2026-11-22"), null);
+  assert.equal(sessionAt("2026-12-25"), 24);
+  assert.equal(session(24).holiday, "Christmas");
+  assert.equal(session(60).phase.key, "sql");
+  for (let i = 0; i < TOTAL; i++) assert.equal(sessionAt(sessionDate(i)), i);
+});
+
+test("learn plan: current session, streak, missed and progress", () => {
+  assert.equal(currentSession("2026-11-17"), 0);           // before the start
+  assert.equal(currentSession("2026-11-28"), 5);           // Saturday -> next Monday
+  assert.equal(currentSession("2027-09-01"), TOTAL - 1);   // after the end
+  const done = ["2026-11-23", "2026-11-24", "2026-11-26", "2026-11-27"];
+  assert.equal(streak(done, "2026-11-27"), 2);
+  assert.equal(streak(done, "2026-11-29"), 2);             // weekend keeps the streak
+  assert.equal(streak(done, "2026-11-30"), 2);             // today not ticked yet still counts the run before it
+  assert.equal(streak(["2026-11-30", ...done], "2026-11-30"), 3);
+  assert.deepEqual(missed(done, "2026-11-30"), [2]);
+  assert.deepEqual(phaseProgress(PHASES[0], done), { done: 4, total: 15 });
+});

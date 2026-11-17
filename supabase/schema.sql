@@ -196,3 +196,16 @@ drop policy if exists "admin notes" on public.notes;
 create policy "admin notes" on public.notes for all using (public.is_admin()) with check (public.is_admin());
 grant select, insert, update, delete on public.notes to authenticated;
 grant all on public.notes to service_role;
+
+-- ---------------------------------------------------------------------------
+-- Learn to code: one row per finished lesson day (Mon-Fri plan in assets/learn-plan.js)
+-- ---------------------------------------------------------------------------
+create table if not exists public.learn_ticks (
+  day     date primary key,
+  done_at timestamptz not null default now()
+);
+alter table public.learn_ticks enable row level security;
+drop policy if exists "admin learn" on public.learn_ticks;
+create policy "admin learn" on public.learn_ticks for all using (public.is_admin()) with check (public.is_admin());
+grant select, insert, update, delete on public.learn_ticks to authenticated;
+grant all on public.learn_ticks to service_role;
