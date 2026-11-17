@@ -287,3 +287,14 @@ test("frameTimes spreads frames across a video without going past the end", () =
   assert.deepEqual(frameTimes(NaN), [0]);
   assert.equal(clock(75), "1:15");
 });
+
+import { sortNotes, snippet } from "../assets/notes.js";
+
+test("notes sort pinned first, then newest, and preview skips headings", () => {
+  const out = sortNotes([
+    { id: "a", updated_at: "2026-11-10" }, { id: "b", updated_at: "2026-11-15" }, { id: "c", pinned: true, updated_at: "2026-11-01" },
+  ]);
+  assert.deepEqual(out.map((n) => n.id), ["c", "b", "a"]);
+  assert.equal(snippet("# Title\n\n**Day 1:** DM [PITAKA](https://x.y)"), "Day 1: DM PITAKA");
+  assert.equal(snippet(""), "");
+});

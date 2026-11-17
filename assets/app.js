@@ -9,6 +9,7 @@ import { demoRows, demoIdeas, demoContent, demoSearchTop, demoDeals } from "./de
 import { DEAL_STAGES, DEAL_KINDS, CLOSED, dealAlert, dealTotals, nextStage, money } from "./deals.js";
 import { GOAL_KINDS, DEFAULT_GOALS, weekStart, goalProgress } from "./goals.js";
 import { createDraftEditor } from "./needsyou.js";
+import { createNotes } from "./notes.js";
 import { logoTile } from "./logos.js";
 import { createChat } from "./chat.js";
 import { createPoster } from "./post.js";
@@ -64,6 +65,9 @@ class DemoStore {
   async saveGoals(list) { lsSet("tbd-demo-goals", list); return list; }
   async deleteGoal(id) { lsSet("tbd-demo-goals", (await this.goals()).filter((x) => x.id !== id)); }
   async ticks() { return lsGet("tbd-demo-ticks", []); }
+  async notes() { return lsGet("tbd-demo-notes", null) ?? [{ id: "n1", title: "Welcome to Notes", pinned: true, updated_at: new Date().toISOString(), body: "# Your notebook\n- Plans, scripts, DMs, ideas\n- **Bold** and lists work\n\n```\nCode blocks get a Copy button, handy for DMs.\n```" }]; }
+  async saveNote(n) { const all = (await this.notes()).filter((x) => x.id !== n.id); all.push(n); lsSet("tbd-demo-notes", all); return n; }
+  async deleteNote(id) { lsSet("tbd-demo-notes", (await this.notes()).filter((x) => x.id !== id)); }
   async saveTick(t) { const all = (await this.ticks()).filter((x) => !(x.goal_id === t.goal_id && x.week === t.week)); all.push(t); lsSet("tbd-demo-ticks", all); return t; }
 }
 
@@ -117,6 +121,13 @@ class LiveStore {
     return data;
   }
   async saveTick(t) { const { data, error } = await this.db.from("goal_ticks").upsert(t).select().single(); if (error) throw error; return data; }
+  async notes() {
+    const { data, error } = await this.db.from("notes").select("*").order("updated_at", { ascending: false });
+    if (error) { if (missingTable(error)) throw new Error("Notes need a quick database update (see the README)."); throw error; }
+    return data;
+  }
+  async saveNote(n) { const { data, error } = await this.db.from("notes").upsert(n).select().single(); if (error) throw error; return data; }
+  async deleteNote(id) { const { error } = await this.db.from("notes").delete().eq("id", id); if (error) throw error; }
   async searchTop() {
     const { data, error } = await this.db.from("search_top").select("*").order("clicks", { ascending: false }).order("impressions", { ascending: false });
     if (error) { console.warn("search_top:", error.message); return []; } // table not created yet
@@ -751,7 +762,7 @@ $("#range").addEventListener("click", (e) => {
 });
 function syncRange() { for (const b of $("#range").children) b.setAttribute("aria-checked", String(Number(b.dataset.days) === state.days)); }
 
-const TITLES = { overview: null, search: "Google Search", calendar: "Content calendar", ideas: "Ideas board", deals: "Brand deals", ask: "TechByDave AI", post: "Post to socials" };
+const TITLES = { overview: null, search: "Google Search", calendar: "Content calendar", ideas: "Ideas board", deals: "Brand deals", notes: "Notes", ask: "TechByDave AI", post: "Post to socials" };
 function route() {
   const v = (location.hash || "#overview").slice(1);
   state.view = TITLES.hasOwnProperty(v) ? v : "overview";
@@ -771,6 +782,7 @@ function renderAll() {
   if (state.view === "calendar") renderCalendar();
   if (state.view === "ideas") renderBoard();
   if (state.view === "deals") renderDeals();
+  if (state.view === "notes") renderNotes();
   if (state.view === "ask") renderAsk();
   if (state.view === "post") renderPost();
 }
@@ -778,6 +790,13 @@ function renderAll() {
 // ---------------------------------------------------------------------------
 // TechByDave AI chat
 // ---------------------------------------------------------------------------
+let notesUi = null, notesDemo = null;
+function renderNotes() {
+  if (notesUi && notesDemo === store.demo) return;
+  notesDemo = store.demo;
+  notesUi = createNotes({ root: $("#notes-root"), store, toast, uid });
+}
+
 let chat = null, chatDemo = null;
 function chatContext() {
   const today = todayIn(TZ), from = addDays(today, -30);

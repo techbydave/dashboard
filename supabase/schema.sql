@@ -179,3 +179,20 @@ select * from (values
   ('ERA', 'Bojan', null, 'paid', 'talking', 'Possible sponsored post: how to wipe and donate old devices.')
 ) as v(brand, contact, product, kind, stage, notes)
 where not exists (select 1 from public.deals);
+
+-- ---------------------------------------------------------------------------
+-- Notes (the Notes page)
+-- ---------------------------------------------------------------------------
+create table if not exists public.notes (
+  id         uuid primary key default gen_random_uuid(),
+  title      text not null default '' check (char_length(title) <= 160),
+  body       text not null default '' check (char_length(body) <= 100000),
+  pinned     boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.notes enable row level security;
+drop policy if exists "admin notes" on public.notes;
+create policy "admin notes" on public.notes for all using (public.is_admin()) with check (public.is_admin());
+grant select, insert, update, delete on public.notes to authenticated;
+grant all on public.notes to service_role;

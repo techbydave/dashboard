@@ -134,6 +134,10 @@ Cost: the first 2 connected accounts are free, then $6/month each. X also bills 
 
 Setup (once): run the "Brand deals" and "Weekly goals" parts at the end of `supabase/schema.sql` in Supabase → SQL Editor. It also adds four starter goals and the brands you were already talking to.
 
+## Notes
+
+The **Notes** page is a notebook for plans, scripts and DMs. It understands simple formatting (`#` headings, `-` lists, `**bold**`), and anything inside a ``` block gets a **Copy** button, which is handy for messages you paste into Instagram. Notes save as you type, can be pinned to the top, and are searchable. Setup: run the "Notes" part at the end of `supabase/schema.sql`.
+
 ## Fill in drafts from the dashboard
 
 Tap a draft in **Needs you** (or the calendar) to fill in its blanks: your take, verdict, photo and the rest. Photos are resized and added to the blog's `images/` folder. When nothing's left, the draft goes live at the next 9:00am publish, or tap **Publish now**.
