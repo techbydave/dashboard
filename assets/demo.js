@@ -62,15 +62,44 @@ export function demoIdeas(today) {
 
 // Used only if GitHub can't be reached in demo mode.
 export const demoContent = [
+  { type: "post", id: "p0", day: "2026-11-16", review: true, title: "iPhone 15 Plus Review: Is It Still Worth It in 2026?", verdict: "BUY", url: "https://techbydave.com/" },
   { type: "post", id: "p1", day: "2026-10-31", title: "AirTag 2 4-Pack Deal: $69.99 Matches the Record Low", verdict: "BUY", url: "https://techbydave.com/" },
   { type: "post", id: "p2", day: "2026-11-01", title: "Motorola Signature 27 Launches Nov. 5 With a 200MP Zoom", verdict: "WAIT", url: "https://techbydave.com/" },
   { type: "post", id: "p3", day: "2026-11-03", title: "Pixel 11 Pro Fold Costs $1,899. Pixel 10 Pro Fold Owners, Skip It.", verdict: "SKIP", url: "https://techbydave.com/" },
   { type: "post", id: "p4", day: "2026-11-03", title: "Early Black Friday: The Cheap Gadgets Have the Deepest Cuts", verdict: "BUY", url: "https://techbydave.com/" },
   { type: "post", id: "p5", day: "2026-11-04", title: "Meta Sets the End Date for Quest 2 and Quest Pro Updates", verdict: "SKIP", url: "https://techbydave.com/" },
   { type: "post", id: "p6", day: "2026-11-10", title: "Google's First Smart Glasses Open for Preorder Nov. 12, No Price", verdict: "WAIT", url: "https://techbydave.com/" },
-  { type: "draft", id: "d1", day: "2026-11-05", title: "Arduview's See-Through Handheld Got Pricier Than Its $49 Pitch", needsTake: true, url: "https://github.com/techbydave/techbydave" },
-  { type: "draft", id: "d2", day: "2026-11-07", title: "ROG Xbox Ally X: Wait for the OLED X20 or Buy the $499 Ally", needsTake: true, url: "https://github.com/techbydave/techbydave" },
-  { type: "draft", id: "d3", day: "2026-11-08", title: "Lomography's Gold-Plated Film Camera Is the MC-A in Fancy Dress", needsTake: true, url: "https://github.com/techbydave/techbydave" },
-  { type: "draft", id: "d4", day: "2026-11-09", title: "AirPods Pro 3 at $199: Is the Early Black Friday Deal Good?", needsTake: true, url: "https://github.com/techbydave/techbydave" },
-  { type: "draft", id: "d5", day: "2026-11-10", title: "Coros Pace 4: Worth $249 After the NYC Marathon Win?", needsTake: false, verdict: "WAIT", url: "https://github.com/techbydave/techbydave" },
+  { type: "draft", id: "d1", file: "demo-d1.md", todo: 3, day: "2026-11-05", title: "Arduview's See-Through Handheld Got Pricier Than Its $49 Pitch", needsTake: true, url: "https://github.com/techbydave/techbydave" },
+  { type: "draft", id: "d2", file: "demo-d2.md", todo: 3, day: "2026-11-07", title: "ROG Xbox Ally X: Wait for the OLED X20 or Buy the $499 Ally", needsTake: true, url: "https://github.com/techbydave/techbydave" },
+  { type: "draft", id: "d3", file: "demo-d3.md", todo: 3, day: "2026-11-08", title: "Lomography's Gold-Plated Film Camera Is the MC-A in Fancy Dress", needsTake: true, url: "https://github.com/techbydave/techbydave" },
+  { type: "draft", id: "d4", file: "demo-d4.md", todo: 3, day: "2026-11-09", title: "AirPods Pro 3 at $199: Is the Early Black Friday Deal Good?", needsTake: true, url: "https://github.com/techbydave/techbydave" },
+  { type: "draft", id: "d5", file: "demo-d5.md", todo: 0, day: "2026-11-10", title: "Coros Pace 4: Worth $249 After the NYC Marathon Win?", needsTake: false, verdict: "WAIT", url: "https://github.com/techbydave/techbydave" },
 ];
+
+// A draft as the generator writes it, for trying the "Needs you" form without GitHub.
+export const demoDraft = (title) => `---
+title: ${title}
+date: 2026-11-15
+verdict: [[ADD YOUR VERDICT: BUY, WAIT or SKIP]]
+---
+
+[[ADD YOUR PHOTO: a photo of the product, or a frame from your Short]]
+
+The news, written up for you: what launched, what it costs and how it compares.
+
+## My take
+
+[[ADD YOUR TAKE: 2-3 sentences on what you think, who should buy or skip, and anything you have actually tried. Delete this whole line when done.]]
+`;
+
+export function demoDeals(today) {
+  const ago = (n) => new Date(Date.parse(today) - n * 86400000).toISOString().slice(0, 10);
+  const ahead = (n) => new Date(Date.parse(today) + n * 86400000).toISOString().slice(0, 10);
+  return [
+    { id: "dl1", brand: "Chipolo", contact: "PR team", product: "Item trackers", kind: "review", stage: "talking", value: null, last_contact: ago(9), notes: "Said yes to a review on the channel." },
+    { id: "dl2", brand: "Bigly Brothers", contact: "Fred", product: "Brother Eye camera", kind: "review", stage: "shipped", value: null, last_contact: ago(3), notes: "Shipping address sent." },
+    { id: "dl3", brand: "ERA", contact: "Bojan", product: "How to wipe and donate old devices", kind: "paid", stage: "agreed", value: 250, due: ahead(2), last_contact: ago(2) },
+    { id: "dl4", brand: "GOBAGS", contact: "Instagram DM", product: "Emergency go bag", kind: "review", stage: "creating", value: null, due: ago(1), last_contact: ago(6) },
+    { id: "dl5", brand: "Sample brand", contact: "Partnerships", product: "Charger roundup", kind: "sponsor", stage: "paid", value: 400, updated_at: today },
+  ];
+}

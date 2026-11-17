@@ -164,3 +164,113 @@ test("whenLabel says today, tomorrow or the date", () => {
   assert.doesNotMatch(whenLabel(new Date(2026, 10, 20, 18, 0).toISOString(), now), /^(Today|Tomorrow)/);
   assert.equal(whenLabel("nope", now), "No time set");
 });
+
+import { placeholders, fillDraft, todoCount, b64ToText, textToB64, photoName } from "../assets/drafts.js";
+
+const DRAFT = `---
+title: iPhone 15 Plus Review
+date: 2026-11-14
+image: [[ADD YOUR PHOTO: filename of your main photo]]
+snippet: [[ADD YOUR SNIPPET: one sentence]]
+verdict: [[ADD YOUR VERDICT: BUY, WAIT or SKIP]]
+---
+
+[[ADD YOUR HOOK: 2-3 sentences.]]
+
+[[ADD YOUR PHOTO: your photo of the phone]]
+
+## My take
+
+[[ADD YOUR TAKE: 2-3 sentences on what you think. Delete this whole line when done.]]
+`;
+
+test("placeholders finds each marker with a label and kind", () => {
+  const p = placeholders(DRAFT);
+  assert.deepEqual(p.map((x) => [x.name, x.kind, x.field]), [
+    ["PHOTO", "photo", "image"], ["SNIPPET", "line", "snippet"], ["VERDICT", "verdict", "verdict"],
+    ["HOOK", "text", null], ["PHOTO", "photo", null], ["TAKE", "text", null],
+  ]);
+  assert.equal(p[5].label, "Your take");
+  assert.equal(p[5].hint, "2-3 sentences on what you think.");
+  assert.equal(todoCount(DRAFT), 6);
+});
+
+test("fillDraft writes answers, removes skipped photos and keeps the rest", () => {
+  const out = fillDraft(DRAFT, {
+    0: { image: "iphone-desk.jpg" },
+    1: { text: "Two years in,\nstill great." },
+    2: { text: "buy" },
+    3: { text: "I've used it daily." },
+    4: { remove: true },
+  });
+  assert.match(out, /^image: iphone-desk\.jpg$/m);
+  assert.match(out, /^snippet: Two years in, still great\.$/m);
+  assert.match(out, /^verdict: BUY$/m);
+  assert.match(out, /I've used it daily\./);
+  assert.doesNotMatch(out, /your photo of the phone/);
+  assert.equal(todoCount(out), 1); // the take is still left
+  const done = fillDraft(out, { 0: { text: "Worth it." } });
+  assert.equal(todoCount(done), 0);
+  assert.match(done, /## My take\n\nWorth it\.\n$/);
+});
+
+test("fillDraft drops a skipped frontmatter photo line and inserts body photos as images", () => {
+  const out = fillDraft(DRAFT, { 0: { remove: true }, 4: { image: "a.jpg", alt: "On my [desk]" } });
+  assert.doesNotMatch(out, /^image:/m);
+  assert.match(out, /!\[On my desk\]\(\.\.\/images\/a\.jpg\)/);
+  assert.match(out, /^title: iPhone 15 Plus Review$/m);
+});
+
+test("base64 round trip keeps emoji and curly quotes", () => {
+  const s = "Worth it? 📱 “Yes” — mostly";
+  assert.equal(b64ToText(textToB64(s)), s);
+  assert.match(photoName("2026-11-14-iphone-15-plus-review.md"), /^iphone-15-plus-review-[a-z0-9]+\.jpg$/);
+});
+
+import { weekStart, goalProgress } from "../assets/goals.js";
+
+test("weekStart is the Monday of the week", () => {
+  assert.equal(weekStart("2026-11-16"), "2026-11-16"); // Monday
+  assert.equal(weekStart("2026-11-22"), "2026-11-16"); // Sunday
+  assert.equal(weekStart("2026-11-15"), "2026-11-09");
+});
+
+test("goalProgress counts posts, reviews, subscribers and ticks for this week", () => {
+  const today = "2026-11-18";
+  const content = [
+    { type: "post", day: "2026-11-16", review: true }, { type: "post", day: "2026-11-17" },
+    { type: "post", day: "2026-11-10" }, { type: "draft", day: "2026-11-18" },
+  ];
+  const rows = [
+    { day: "2026-11-15", source: "newsletter", metric: "subscribers", value: 40 },
+    { day: "2026-11-18", source: "newsletter", metric: "subscribers", value: 47 },
+  ];
+  assert.equal(goalProgress({ kind: "posts", target: 3 }, { today, content }).done, 2);
+  assert.equal(goalProgress({ kind: "reviews", target: 2 }, { today, content }).done, 1);
+  const subs = goalProgress({ kind: "subscribers", target: 5 }, { today, rows });
+  assert.equal(subs.done, 7); assert.equal(subs.met, true); assert.equal(subs.pct, 1);
+  const m = goalProgress({ id: "g", kind: "manual", target: 5 }, { today, ticks: [{ goal_id: "g", week: "2026-11-16", count: 2 }] });
+  assert.equal(m.done, 2); assert.equal(m.daysLeft, 4);
+  assert.equal(goalProgress({ kind: "subscribers", target: 5 }, { today, rows: [] }).done, null);
+});
+
+import { dealAlert, dealTotals, nextStage } from "../assets/deals.js";
+
+test("deal alerts flag overdue, due soon, unpaid and quiet deals", () => {
+  const today = "2026-11-16";
+  assert.equal(dealAlert({ stage: "creating", due: "2026-11-14" }, today).text, "Overdue by 2 days");
+  assert.equal(dealAlert({ stage: "creating", due: "2026-11-16" }, today).text, "Due today");
+  assert.equal(dealAlert({ stage: "talking", last_contact: "2026-11-05" }, today).text, "Follow up: quiet 11 days");
+  assert.equal(dealAlert({ stage: "talking", last_contact: "2026-11-13" }, today), null);
+  assert.equal(dealAlert({ stage: "posted", value: 300 }, today).text, "Waiting on payment");
+  assert.equal(dealAlert({ stage: "paid", due: "2026-11-01" }, today), null);
+  assert.equal(nextStage("talking"), "agreed"); assert.equal(nextStage("paid"), null);
+});
+
+test("deal totals add up open, agreed and paid money", () => {
+  const t = dealTotals([
+    { stage: "talking", value: 500 }, { stage: "agreed", value: 300 }, { stage: "paid", value: 200, updated_at: "2026-10-01" },
+    { stage: "closed", value: 900 },
+  ], "2026-11-16");
+  assert.deepEqual(t, { active: 2, agreed: 300, paidThisYear: 200, attention: 0 });
+});

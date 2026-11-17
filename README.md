@@ -86,6 +86,8 @@ Any key you leave out is just skipped, so you can add them one at a time.
 | `index.html`, `assets/` | The dashboard (plain HTML, CSS and JavaScript, no build step) |
 | `assets/metrics.js` | The maths: growth, period comparisons, calendar grid |
 | `assets/content.js` | Reads drafts and posts from the blog repo |
+| `assets/drafts.js`, `assets/needsyou.js` | Finds a draft's `[[ADD YOUR ...]]` blanks and fills them in |
+| `assets/deals.js`, `assets/goals.js` | Brand deal stages and alerts; weekly goal counting |
 | `assets/charts.js` | The charts |
 | `supabase/schema.sql` | Database tables and the admin-only security rules |
 | `scripts/collect.mjs` | The twice-daily collector (Cloudflare, Kit, YouTube) |
@@ -119,3 +121,25 @@ Setup (once):
 **The $0 setup:** connect only TikTok and YouTube in Zernio (its two free accounts). Instagram then posts directly through your own Meta app: add `IG_ACCESS_TOKEN` (a token with `instagram_content_publish`) to Supabase secrets. Direct Instagram posts go out right away and can't be scheduled.
 
 Cost: the first 2 connected accounts are free, then $6/month each. X also bills about $0.015 per post ($0.20 if it contains a link); the page warns you.
+
+## Deals and goals
+
+**Brand deals** (its own page) tracks every brand from first email to getting paid: Talking → Agreed → Product on the way → Making content → Posted → Paid. Cards flag deals that are overdue, due within 3 days, posted but unpaid, or quiet for 7 days ("Contacted today" resets the nudge).
+
+**This week** (Overview) shows weekly goals that reset every Monday. Posts, hands-on reviews (posts with `type: review`), new newsletter subscribers and website visits count themselves; anything else gets a +1 button. Tap **Edit goals** to change them.
+
+**Needs you** (Overview) lists deals that need attention and every blog draft still waiting on you.
+
+Setup (once): run the "Brand deals" and "Weekly goals" parts at the end of `supabase/schema.sql` in Supabase → SQL Editor. It also adds four starter goals and the brands you were already talking to.
+
+## Fill in drafts from the dashboard
+
+Tap a draft in **Needs you** (or the calendar) to fill in its blanks: your take, verdict, photo and the rest. Photos are resized and added to the blog's `images/` folder. When nothing's left, the draft goes live at the next 9:00am publish, or tap **Publish now**.
+
+Saving needs a GitHub token, kept in Supabase so it never reaches the browser:
+1. GitHub → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
+2. Name it `TechByDave dashboard`, pick an expiry (1 year is fine), and under **Repository access** choose **Only select repositories → techbydave/techbydave**.
+3. Under **Permissions → Repository permissions**, set **Contents: Read and write** and **Actions: Read and write**. Generate it and copy it.
+4. Supabase → **Edge Functions → Secrets**: add `BLOG_GITHUB_TOKEN` with the token as its value.
+
+The `blog-drafts` function (`supabase/functions/blog-drafts/index.ts`) is deployed with "Verify JWT with legacy secret" off, like the others. Without the token, the form still opens and offers "Edit on GitHub".

@@ -110,3 +110,72 @@ create policy "admins upload social media" on storage.objects for insert to auth
   with check (bucket_id = 'social-media' and public.is_admin());
 create policy "admins delete social media" on storage.objects for delete to authenticated
   using (bucket_id = 'social-media' and public.is_admin());
+
+-- ---------------------------------------------------------------------------
+-- Brand deals (the Deals page)
+-- ---------------------------------------------------------------------------
+create table if not exists public.deals (
+  id           uuid primary key default gen_random_uuid(),
+  brand        text not null check (char_length(brand) between 1 and 80),
+  contact      text check (char_length(contact) <= 120),
+  email        text check (char_length(email) <= 160),
+  product      text check (char_length(product) <= 160),
+  kind         text not null default 'review' check (kind in ('review', 'paid', 'sponsor', 'affiliate', 'other')),
+  stage        text not null default 'talking' check (stage in ('talking', 'agreed', 'shipped', 'creating', 'posted', 'paid', 'closed')),
+  value        numeric check (value >= 0),
+  due          date,
+  last_contact date,
+  notes        text check (char_length(notes) <= 4000),
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+alter table public.deals enable row level security;
+drop policy if exists "admin deals" on public.deals;
+create policy "admin deals" on public.deals for all using (public.is_admin()) with check (public.is_admin());
+
+-- ---------------------------------------------------------------------------
+-- Weekly goals (Overview). kind: posts | reviews | subscribers | visits count themselves; manual uses goal_ticks.
+-- ---------------------------------------------------------------------------
+create table if not exists public.goals (
+  id         uuid primary key default gen_random_uuid(),
+  title      text not null check (char_length(title) between 1 and 80),
+  kind       text not null default 'manual' check (kind in ('posts', 'reviews', 'subscribers', 'visits', 'manual')),
+  target     integer not null default 1 check (target between 1 and 100000),
+  position   integer not null default 0,
+  created_at timestamptz not null default now()
+);
+create table if not exists public.goal_ticks (
+  goal_id uuid not null references public.goals (id) on delete cascade,
+  week    date not null,
+  count   integer not null default 0 check (count between 0 and 100000),
+  primary key (goal_id, week)
+);
+alter table public.goals enable row level security;
+alter table public.goal_ticks enable row level security;
+drop policy if exists "admin goals" on public.goals;
+create policy "admin goals" on public.goals for all using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "admin goal ticks" on public.goal_ticks;
+create policy "admin goal ticks" on public.goal_ticks for all using (public.is_admin()) with check (public.is_admin());
+
+grant select, insert, update, delete on public.deals, public.goals, public.goal_ticks to authenticated;
+grant all on public.deals, public.goals, public.goal_ticks to service_role;
+
+-- Starter goals (only if there are none yet)
+insert into public.goals (title, kind, target, position)
+select * from (values
+  ('Publish 3 blog posts', 'posts', 3, 0),
+  ('2 hands-on reviews (for AdSense)', 'reviews', 2, 1),
+  ('Post 5 Shorts', 'manual', 5, 2),
+  ('+10 newsletter subscribers', 'subscribers', 10, 3)
+) as v(title, kind, target, position)
+where not exists (select 1 from public.goals);
+
+-- The brands you're already talking to (only if the table is empty). Edit stages and dates on the Deals page.
+insert into public.deals (brand, contact, product, kind, stage, notes)
+select * from (values
+  ('Chipolo', null, 'Item trackers', 'review', 'talking', 'You replied that you''d like to review them on your channel.'),
+  ('GOBAGS', 'Instagram DM', null, 'review', 'talking', 'Reached out by DM.'),
+  ('Bigly Brothers', 'Fred', null, 'review', 'agreed', 'Fred offered a product to review. Send your shipping address if you haven''t yet.'),
+  ('ERA', 'Bojan', null, 'paid', 'talking', 'Possible sponsored post: how to wipe and donate old devices.')
+) as v(brand, contact, product, kind, stage, notes)
+where not exists (select 1 from public.deals);

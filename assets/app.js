@@ -5,7 +5,10 @@
 import { series, dailyFilled, growth, periodCompare, lastEntryDay, compact, signed, monthGrid, addDays, daysBetween, todayIn, sum, valueOn } from "./metrics.js";
 import { areaChart, sparkline, tableHTML } from "./charts.js";
 import { loadContent } from "./content.js";
-import { demoRows, demoIdeas, demoContent, demoSearchTop } from "./demo.js";
+import { demoRows, demoIdeas, demoContent, demoSearchTop, demoDeals } from "./demo.js";
+import { DEAL_STAGES, DEAL_KINDS, CLOSED, dealAlert, dealTotals, nextStage, money } from "./deals.js";
+import { GOAL_KINDS, DEFAULT_GOALS, weekStart, goalProgress } from "./goals.js";
+import { createDraftEditor } from "./needsyou.js";
 import { logoTile } from "./logos.js";
 import { createChat } from "./chat.js";
 import { createPoster } from "./post.js";
@@ -54,7 +57,18 @@ class DemoStore {
   async saveIdea(idea) { const all = await this.ideas(); const i = all.findIndex((x) => x.id === idea.id); if (i >= 0) all[i] = idea; else all.push(idea); lsSet("tbd-demo-ideas", all); return idea; }
   async deleteIdea(id) { lsSet("tbd-demo-ideas", (await this.ideas()).filter((x) => x.id !== id)); }
   async searchTop() { return demoSearchTop(this.today); }
+  async deals() { const v = lsGet("tbd-demo-deals", null); if (v) return v; const s = demoDeals(this.today); lsSet("tbd-demo-deals", s); return s; }
+  async saveDeal(d) { const all = await this.deals(); const i = all.findIndex((x) => x.id === d.id); if (i >= 0) all[i] = d; else all.push(d); lsSet("tbd-demo-deals", all); return d; }
+  async deleteDeal(id) { lsSet("tbd-demo-deals", (await this.deals()).filter((x) => x.id !== id)); }
+  async goals() { const v = lsGet("tbd-demo-goals", null); if (v) return v; const s = DEFAULT_GOALS.map((g) => ({ ...g, id: uid() })); lsSet("tbd-demo-goals", s); return s; }
+  async saveGoals(list) { lsSet("tbd-demo-goals", list); return list; }
+  async deleteGoal(id) { lsSet("tbd-demo-goals", (await this.goals()).filter((x) => x.id !== id)); }
+  async ticks() { return lsGet("tbd-demo-ticks", []); }
+  async saveTick(t) { const all = (await this.ticks()).filter((x) => !(x.goal_id === t.goal_id && x.week === t.week)); all.push(t); lsSet("tbd-demo-ticks", all); return t; }
 }
+
+// A table that hasn't been created yet shouldn't break the whole dashboard.
+const missingTable = (error) => /does not exist|schema cache|PGRST205|42P01/i.test(`${error?.code} ${error?.message}`);
 
 class LiveStore {
   demo = false;
@@ -83,6 +97,26 @@ class LiveStore {
   async ideas() { const { data, error } = await this.db.from("ideas").select("*").order("created_at"); if (error) throw error; return data; }
   async saveIdea(idea) { const { data, error } = await this.db.from("ideas").upsert(idea).select().single(); if (error) throw error; return data; }
   async deleteIdea(id) { const { error } = await this.db.from("ideas").delete().eq("id", id); if (error) throw error; }
+  async deals() {
+    const { data, error } = await this.db.from("deals").select("*").order("created_at");
+    if (error) { if (missingTable(error)) { state.setupNeeded = true; return []; } throw error; }
+    return data;
+  }
+  async saveDeal(d) { const { data, error } = await this.db.from("deals").upsert({ ...d, updated_at: new Date().toISOString() }).select().single(); if (error) throw error; return data; }
+  async deleteDeal(id) { const { error } = await this.db.from("deals").delete().eq("id", id); if (error) throw error; }
+  async goals() {
+    const { data, error } = await this.db.from("goals").select("*").order("position").order("created_at");
+    if (error) { if (missingTable(error)) { state.setupNeeded = true; return []; } throw error; }
+    return data;
+  }
+  async saveGoals(list) { if (!list.length) return []; const { data, error } = await this.db.from("goals").upsert(list).select(); if (error) throw error; return data; }
+  async deleteGoal(id) { const { error } = await this.db.from("goals").delete().eq("id", id); if (error) throw error; }
+  async ticks(week) {
+    const { data, error } = await this.db.from("goal_ticks").select("*").gte("week", week);
+    if (error) { if (missingTable(error)) return []; throw error; }
+    return data;
+  }
+  async saveTick(t) { const { data, error } = await this.db.from("goal_ticks").upsert(t).select().single(); if (error) throw error; return data; }
   async searchTop() {
     const { data, error } = await this.db.from("search_top").select("*").order("clicks", { ascending: false }).order("impressions", { ascending: false });
     if (error) { console.warn("search_top:", error.message); return []; } // table not created yet
@@ -91,7 +125,8 @@ class LiveStore {
 }
 
 let store = null;
-const state = { view: "overview", days: lsGet("tbd-range", 30), rows: [], ideas: [], content: [], contentNote: "", searchTop: [], cal: null, user: null };
+const state = { view: "overview", days: lsGet("tbd-range", 30), rows: [], ideas: [], content: [], contentNote: "", searchTop: [], cal: null, user: null,
+  deals: [], goals: [], ticks: [], showClosed: false, setupNeeded: false };
 
 // ---------------------------------------------------------------------------
 // Small UI helpers
@@ -167,6 +202,8 @@ function renderOverview() {
 
   renderUpNext(to);
   renderBanner(to);
+  renderGoals(to);
+  renderNeedsYou(to);
 
   // Traffic chart
   const pv = sum(series(rows, "website", "pageviews", from, to));
@@ -275,7 +312,7 @@ function renderUpNext(today) {
   const items = [
     ...overdue.map((i) => `<button class="up-item warn" data-idea="${esc(i.id)}"><span class="when">Overdue</span><b>${esc(i.title)}</b><span class="tag">${esc(i.platform || "")}</span></button>`),
     ...soon.slice(0, 3).map((i) => `<button class="up-item" data-idea="${esc(i.id)}"><span class="when">${relDay(i.due, today)}</span><b>${esc(i.title)}</b><span class="tag">${esc(i.platform || "")}</span></button>`),
-    ...drafts.slice(0, 3).map((d) => `<a class="up-item" href="${esc(d.url)}" target="_blank" rel="noopener"><span class="when">Draft</span><b>${esc(d.title)}</b><span class="tag ${d.needsTake ? "attn" : ""}">${d.needsTake ? "Needs your take" : "Ready to publish"}</span></a>`),
+    ...drafts.slice(0, 3).map((d) => `<button class="up-item" data-draft="${esc(d.id)}"><span class="when">Draft</span><b>${esc(d.title)}</b><span class="tag ${draftTodo(d) ? "attn" : ""}">${draftLabel(d)}</span></button>`),
   ];
   $("#upnext").innerHTML = items.length ? items.join("") : `<div class="empty-mini"><b>All caught up.</b><span class="muted">Nothing due in the next two weeks.</span><button class="btn ghost sm" data-new-idea>Add an idea</button></div>`;
   if (state.contentNote) $("#upnext").insertAdjacentHTML("beforeend", `<p class="muted small note">${esc(state.contentNote)}</p>`);
@@ -327,7 +364,7 @@ function renderCalendar() {
     : `<p class="muted small">Every idea has a date. Nice planning.</p>`;
   const drafts = state.content.filter((e) => e.type === "draft").sort((a, b) => b.day.localeCompare(a.day));
   $("#drafts-list").innerHTML = drafts.length
-    ? drafts.map((d) => `<a class="draft-row" href="${esc(d.url)}" target="_blank" rel="noopener"><b>${esc(d.title)}</b><span class="muted small">${fmt(d.day, { month: "short", day: "numeric" })} · <span class="${d.needsTake ? "attn-text" : ""}">${d.needsTake ? "Needs your take" : d.verdict ? `Verdict: ${esc(d.verdict)}` : "Ready"}</span></span></a>`).join("")
+    ? drafts.map((d) => `<button class="draft-row" data-draft="${esc(d.id)}"><b>${esc(d.title)}</b><span class="muted small">${fmt(d.day, { month: "short", day: "numeric" })} · <span class="${draftTodo(d) ? "attn-text" : ""}">${draftLabel(d)}</span></span></button>`).join("")
     : `<p class="muted small">No drafts waiting.</p>`;
 }
 
@@ -367,6 +404,203 @@ function renderBoard() {
     </section>`;
   }).join("");
 }
+
+// ---------------------------------------------------------------------------
+// Needs you: drafts waiting on Dave + deals that need attention
+// ---------------------------------------------------------------------------
+const draftTodo = (d) => (d.todo ?? (d.needsTake ? 1 : 0));
+const draftLabel = (d) => { const n = draftTodo(d); return n ? `${n} thing${n === 1 ? "" : "s"} to add` : "Ready to publish"; };
+let editor = null, editorDemo = null;
+function draftEditor() {
+  if (!editor || editorDemo !== store.demo) {
+    editorDemo = store.demo;
+    editor = createDraftEditor({
+      demo: store.demo, endpoint: `${(cfg.supabaseUrl || "").replace(/\/$/, "")}/functions/v1/blog-drafts`,
+      getToken: () => store.token(), toast,
+      onSaved: (d, left) => { const x = state.content.find((e) => e.id === d.id); if (x) { x.todo = left; x.needsTake = left > 0; } renderAll(); },
+    });
+  }
+  return editor;
+}
+
+function renderNeedsYou(today) {
+  const drafts = state.content.filter((e) => e.type === "draft").sort((a, b) => draftTodo(a) - draftTodo(b) || b.day.localeCompare(a.day));
+  const deals = state.deals.map((d) => ({ d, a: dealAlert(d, today) })).filter((x) => x.a)
+    .sort((x, y) => ["late", "soon", "quiet"].indexOf(x.a.level) - ["late", "soon", "quiet"].indexOf(y.a.level));
+  const items = [
+    ...deals.map(({ d, a }) => `<button class="ny-item ${a.level}" data-deal="${esc(d.id)}"><span class="ny-ic deal" aria-hidden="true">$</span>
+      <span class="ny-text"><b>${esc(d.brand)}${d.product ? ` · ${esc(d.product)}` : ""}</b><span>${esc(a.text)}</span></span></button>`),
+    ...drafts.map((d) => `<button class="ny-item ${draftTodo(d) ? "" : "ready"}" data-draft="${esc(d.id)}"><span class="ny-ic draft" aria-hidden="true">${draftTodo(d) ? "✎" : "✓"}</span>
+      <span class="ny-text"><b>${esc(d.title)}</b><span>${draftLabel(d)}</span></span></button>`),
+  ];
+  $("#needs-count").textContent = items.length ? String(items.length) : "";
+  $("#needs-you").innerHTML = items.length ? items.slice(0, 8).join("") + (items.length > 8 ? `<a class="linkish small" href="#calendar">See all drafts</a>` : "")
+    : `<div class="empty-mini"><b>Nothing needs you.</b><span class="muted">Drafts and brand follow-ups will show up here.</span></div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Weekly goals
+// ---------------------------------------------------------------------------
+function renderGoals(today) {
+  const box = $("#goals");
+  if (state.setupNeeded && !state.goals.length) { box.innerHTML = `<p class="muted small">Goals need a quick database update. See the README section "Deals and goals".</p>`; return; }
+  const week = weekStart(today);
+  const left = 6 - daysBetween(week, today);
+  $("#goals-week").textContent = `Week of ${fmt(week, { month: "short", day: "numeric" })} · ${left === 0 ? "last day" : `${left} day${left === 1 ? "" : "s"} left`}`;
+  if (!state.goals.length) { box.innerHTML = `<div class="empty-mini"><b>No goals yet.</b><button class="btn ghost sm" data-edit-goals>Set this week's goals</button></div>`; return; }
+  const ctx = { today, rows: state.rows, content: state.content, ticks: state.ticks };
+  const all = state.goals.map((g) => ({ g, p: goalProgress(g, ctx) }));
+  const met = all.filter((x) => x.p.met).length;
+  box.innerHTML = all.map(({ g, p }) => `
+    <div class="goal ${p.met ? "met" : ""}">
+      <div class="goal-top"><b>${esc(g.title)}</b><span class="goal-num">${p.done == null ? "–" : compact(p.done)}<span class="muted">/${compact(p.target)}</span></span></div>
+      <div class="goal-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${p.target}" aria-valuenow="${p.done ?? 0}" aria-label="${esc(g.title)}"><i style="width:${Math.round(p.pct * 100)}%"></i></div>
+      ${g.kind === "manual" ? `<div class="goal-ticks"><button class="btn sm" data-tick="${esc(g.id)}" data-step="-1" aria-label="Minus one" ${p.done ? "" : "disabled"}>−1</button><button class="btn sm primary" data-tick="${esc(g.id)}" data-step="1">+1</button></div>`
+        : `<span class="muted small">${p.done == null ? "Waiting for data" : "Counts itself"}</span>`}
+    </div>`).join("") + `<p class="muted small goal-sum">${met === all.length ? "🎉 Every goal hit this week." : `${met} of ${all.length} done`}</p>`;
+}
+
+async function tickGoal(id, step) {
+  const week = weekStart(todayIn(TZ));
+  const cur = state.ticks.find((t) => t.goal_id === id && t.week === week);
+  const t = { goal_id: id, week, count: Math.max(0, (cur?.count ?? 0) + step) };
+  state.ticks = [...state.ticks.filter((x) => !(x.goal_id === id && x.week === week)), t];
+  renderGoals(todayIn(TZ));
+  try { await store.saveTick(t); } catch (ex) { toast(ex.message); }
+}
+
+let goalDraft = [];
+function openGoals() {
+  goalDraft = state.goals.map((g) => ({ ...g }));
+  if (!goalDraft.length) goalDraft = DEFAULT_GOALS.map((g) => ({ ...g, id: uid(), _new: true }));
+  drawGoalRows();
+  $("#goals-msg").textContent = "";
+  $("#goals-dialog").showModal();
+}
+function drawGoalRows() {
+  $("#goal-rows").innerHTML = goalDraft.map((g, i) => `
+    <div class="goal-row" data-row="${i}">
+      <input aria-label="Goal" maxlength="80" value="${esc(g.title)}" data-f="title">
+      <input aria-label="Target" type="number" min="1" max="100000" value="${esc(g.target)}" data-f="target">
+      <select aria-label="How it's counted" data-f="kind">${Object.entries(GOAL_KINDS).map(([k, v]) => `<option value="${k}" ${g.kind === k ? "selected" : ""}>${v.label}</option>`).join("")}</select>
+      <button class="icon-btn" type="button" data-rm="${i}" aria-label="Remove goal"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>`).join("");
+}
+function readGoalRows() {
+  document.querySelectorAll("#goal-rows .goal-row").forEach((row) => {
+    const g = goalDraft[Number(row.dataset.row)];
+    row.querySelectorAll("[data-f]").forEach((el) => { g[el.dataset.f] = el.dataset.f === "target" ? Number(el.value) : el.value; });
+  });
+}
+$("#goal-rows").addEventListener("click", (e) => {
+  const rm = e.target.closest("[data-rm]"); if (!rm) return;
+  readGoalRows(); goalDraft.splice(Number(rm.dataset.rm), 1); drawGoalRows();
+});
+$("#goal-add").addEventListener("click", () => { readGoalRows(); goalDraft.push({ id: uid(), title: "", kind: "manual", target: 3, _new: true }); drawGoalRows(); document.querySelector("#goal-rows .goal-row:last-child input")?.focus(); });
+$("#goals-form").addEventListener("submit", async (e) => {
+  e.preventDefault(); readGoalRows();
+  const list = goalDraft.filter((g) => g.title.trim()).map((g, i) => ({ id: g.id, title: g.title.trim().slice(0, 80), kind: g.kind, target: Math.max(1, Math.round(g.target) || 1), position: i }));
+  if (list.some((g) => !GOAL_KINDS[g.kind])) return ($("#goals-msg").textContent = "Pick how each goal is counted.");
+  try {
+    const removed = state.goals.filter((g) => !list.some((x) => x.id === g.id));
+    for (const g of removed) await store.deleteGoal(g.id);
+    state.goals = (await store.saveGoals(list)).sort((a, b) => a.position - b.position);
+    $("#goals-dialog").close(); renderAll(); toast("Goals saved");
+  } catch (ex) { $("#goals-msg").textContent = ex.message; }
+});
+
+// ---------------------------------------------------------------------------
+// Brand deals
+// ---------------------------------------------------------------------------
+const KIND_LABEL = Object.fromEntries(DEAL_KINDS);
+const STAGE_LABEL = Object.fromEntries([...DEAL_STAGES, [CLOSED, "Closed"]]);
+function brandTile(name) {
+  let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) % 360;
+  return `<span class="brand-tile" style="--h:${h}" aria-hidden="true">${esc(String(name).trim().charAt(0).toUpperCase() || "?")}</span>`;
+}
+function renderDeals() {
+  const today = todayIn(TZ);
+  const t = dealTotals(state.deals, today);
+  $("#deal-stats").innerHTML = [
+    ["Active deals", String(t.active)], ["Agreed, not paid yet", money(t.agreed)], [`Paid in ${today.slice(0, 4)}`, money(t.paidThisYear)],
+    ["Need attention", String(t.attention)],
+  ].map(([k, v], i) => `<article class="kpi" style="--i:${i}"><div class="kpi-top"><span class="kpi-label">${k}</span></div><div class="kpi-num">${v}</div></article>`).join("");
+  $("#deals-setup").hidden = !state.setupNeeded;
+  const stages = state.showClosed ? [...DEAL_STAGES, [CLOSED, "Closed"]] : DEAL_STAGES;
+  $("#deal-board").innerHTML = stages.map(([key, label]) => {
+    const list = state.deals.filter((d) => d.stage === key).sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
+    return `<section class="col" data-deal-stage="${key}">
+      <header><h2>${label}</h2><span class="count">${list.length}</span></header>
+      <div class="col-body">
+        ${list.map((d) => {
+          const a = dealAlert(d, today), nx = nextStage(d.stage);
+          return `<article class="card deal-card ${a ? a.level : ""}">
+            <button class="deal-open" data-deal="${esc(d.id)}">
+              <span class="deal-head">${brandTile(d.brand)}<b>${esc(d.brand)}</b>${Number(d.value) > 0 ? `<span class="deal-val">${money(d.value)}</span>` : ""}</span>
+              ${d.product ? `<span class="small">${esc(d.product)}</span>` : ""}
+              <span class="tag">${esc(KIND_LABEL[d.kind] || d.kind)}</span>
+              ${a ? `<span class="deal-alert">${esc(a.text)}</span>` : d.due ? `<span class="due">${relDay(d.due, today)}</span>` : ""}
+            </button>
+            <div class="deal-actions">
+              ${a?.level === "quiet" ? `<button class="btn sm" data-deal-contacted="${esc(d.id)}">Contacted today</button>` : ""}
+              ${nx && key !== CLOSED ? `<button class="btn sm ghost" data-deal-next="${esc(d.id)}">→ ${esc(STAGE_LABEL[nx])}</button>` : ""}
+            </div>
+          </article>`;
+        }).join("")}
+        ${key === "talking" ? `<button class="add-card" data-new-deal>+ Add a brand</button>` : ""}
+      </div>
+    </section>`;
+  }).join("");
+  $("#deals-closed").textContent = state.showClosed ? "Hide closed" : `Show closed (${state.deals.filter((d) => d.stage === CLOSED).length})`;
+}
+$("#deals-closed").addEventListener("click", () => { state.showClosed = !state.showClosed; renderDeals(); });
+
+async function saveDeal(d, note) {
+  const saved = await store.saveDeal(d);
+  const i = state.deals.findIndex((x) => x.id === saved.id);
+  if (i >= 0) state.deals[i] = saved; else state.deals.push(saved);
+  renderAll(); if (note) toast(note);
+}
+async function moveDeal(id) {
+  const d = state.deals.find((x) => x.id === id); const nx = d && nextStage(d.stage); if (!nx) return;
+  try { await saveDeal({ ...d, stage: nx, last_contact: todayIn(TZ) }, `${d.brand}: ${STAGE_LABEL[nx]}`); } catch (ex) { toast(ex.message); }
+}
+async function markContacted(id) {
+  const d = state.deals.find((x) => x.id === id); if (!d) return;
+  try { await saveDeal({ ...d, last_contact: todayIn(TZ) }, `Noted. Next nudge in a week.`); } catch (ex) { toast(ex.message); }
+}
+
+let editingDeal = null;
+function openDeal(d) {
+  editingDeal = d || null;
+  const v = { brand: "", contact: "", email: "", product: "", kind: "review", stage: "talking", value: "", due: "", last_contact: todayIn(TZ), notes: "", ...(d || {}) };
+  $("#deal-title").textContent = d ? d.brand : "New brand deal";
+  for (const k of ["brand", "contact", "email", "product", "kind", "stage", "value", "due", "last_contact", "notes"]) $(`#dl-${k}`).value = v[k] ?? "";
+  $("#deal-delete").hidden = !d; $("#deal-delete").textContent = "Delete"; delete $("#deal-delete").dataset.armed;
+  $("#deal-msg").textContent = "";
+  $("#deal-dialog").showModal();
+  if (!d) $("#dl-brand").focus();
+}
+$("#dl-today").addEventListener("click", () => { $("#dl-last_contact").value = todayIn(TZ); });
+$("#deal-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const brand = $("#dl-brand").value.trim();
+  if (!brand) { $("#deal-msg").textContent = "Add the brand's name."; return $("#dl-brand").focus(); }
+  const email = $("#dl-email").value.trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { $("#deal-msg").textContent = "That email doesn't look right."; return $("#dl-email").focus(); }
+  const val = $("#dl-value").value.trim();
+  const d = { ...(editingDeal || { id: uid(), created_at: new Date().toISOString() }), brand, contact: $("#dl-contact").value.trim() || null, email: email || null,
+    product: $("#dl-product").value.trim() || null, kind: $("#dl-kind").value, stage: $("#dl-stage").value,
+    value: val === "" ? null : Math.max(0, Number(val) || 0), due: $("#dl-due").value || null, last_contact: $("#dl-last_contact").value || null,
+    notes: $("#dl-notes").value.trim() || null };
+  try { await saveDeal(d, "Deal saved"); $("#deal-dialog").close(); } catch (ex) { $("#deal-msg").textContent = ex.message; }
+});
+$("#deal-delete").addEventListener("click", async (e) => {
+  const b = e.currentTarget;
+  if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Tap again to delete"; return; }
+  try { await store.deleteDeal(editingDeal.id); state.deals = state.deals.filter((x) => x.id !== editingDeal.id); $("#deal-dialog").close(); renderAll(); toast("Deal deleted"); }
+  catch (ex) { $("#deal-msg").textContent = ex.message; }
+});
 
 // ---------------------------------------------------------------------------
 // Dialogs: idea + check-in
@@ -463,6 +697,18 @@ document.addEventListener("click", async (e) => {
     await saveIdea({ id: uid(), title: `Short: ${sh.dataset.short}`, platform: "TikTok", status: "idea", due: null, notes: "Turn the verdict into a 30-second worth it or waste video." }, true);
     return toast("Added to your ideas board");
   }
+  const dr = t.closest("[data-draft]");
+  if (dr) { const d = state.content.find((x) => x.id === dr.dataset.draft); if (d) { $("#day-dialog").open && $("#day-dialog").close(); return draftEditor().open(d); } }
+  const nx = t.closest("[data-deal-next]");
+  if (nx) return moveDeal(nx.dataset.dealNext);
+  const ct = t.closest("[data-deal-contacted]");
+  if (ct) return markContacted(ct.dataset.dealContacted);
+  const dl = t.closest("[data-deal]");
+  if (dl) return openDeal(state.deals.find((x) => x.id === dl.dataset.deal));
+  if (t.closest("[data-new-deal]")) return openDeal(null);
+  const tk = t.closest("[data-tick]");
+  if (tk) return tickGoal(tk.dataset.tick, Number(tk.dataset.step));
+  if (t.closest("[data-edit-goals]")) return openGoals();
   const cell = t.closest(".cell[data-day]");
   if (cell) return openDay(cell.dataset.day);
 });
@@ -505,7 +751,7 @@ $("#range").addEventListener("click", (e) => {
 });
 function syncRange() { for (const b of $("#range").children) b.setAttribute("aria-checked", String(Number(b.dataset.days) === state.days)); }
 
-const TITLES = { overview: null, search: "Google Search", calendar: "Content calendar", ideas: "Ideas board", ask: "TechByDave AI", post: "Post to socials" };
+const TITLES = { overview: null, search: "Google Search", calendar: "Content calendar", ideas: "Ideas board", deals: "Brand deals", ask: "TechByDave AI", post: "Post to socials" };
 function route() {
   const v = (location.hash || "#overview").slice(1);
   state.view = TITLES.hasOwnProperty(v) ? v : "overview";
@@ -524,6 +770,7 @@ function renderAll() {
   if (state.view === "search") renderSearch();
   if (state.view === "calendar") renderCalendar();
   if (state.view === "ideas") renderBoard();
+  if (state.view === "deals") renderDeals();
   if (state.view === "ask") renderAsk();
   if (state.view === "post") renderPost();
 }
@@ -675,8 +922,9 @@ async function enter() {
   if (!(await store.isAdmin())) { await store.signOut(); return showLogin("This account doesn't have access to the dashboard."); }
   $("#boot").hidden = false; $("#boot").textContent = "Loading your numbers…";
   const from = addDays(todayIn(TZ), -200);
-  const [rows, ideas, searchTop] = await Promise.all([store.metrics(from), store.ideas(), store.searchTop()]);
-  state.rows = rows; state.ideas = ideas; state.searchTop = searchTop;
+  const [rows, ideas, searchTop, deals, goals, ticks] = await Promise.all([store.metrics(from), store.ideas(), store.searchTop(),
+    store.deals(), store.goals(), store.ticks(weekStart(todayIn(TZ)))]);
+  state.rows = rows; state.ideas = ideas; state.searchTop = searchTop; state.deals = deals; state.goals = goals; state.ticks = ticks;
   $("#who-email").textContent = state.user.email || "";
   $("#demo-note").hidden = !store.demo;
   $("#today-label").textContent = new Date().toLocaleDateString("en-CA", { timeZone: TZ, weekday: "long", month: "long", day: "numeric" });

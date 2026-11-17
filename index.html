@@ -70,6 +70,7 @@
         <a href="#search" data-view="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Google Search</a>
         <a href="#calendar" data-view="calendar"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendar</a>
         <a href="#ideas" data-view="ideas"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V17h5v-1.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></svg>Ideas</a>
+        <a href="#deals" data-view="deals"><svg viewBox="0 0 24 24"><path d="M12 3v18M16.5 7.5c0-1.7-2-3-4.5-3s-4.5 1.3-4.5 3 2 2.6 4.5 3.1 4.5 1.4 4.5 3.2-2 3.2-4.5 3.2-4.5-1.4-4.5-3.2"/></svg>Brand deals</a>
         <a href="#post" data-view="post"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>Post to socials</a>
         <a href="#ask" data-view="ask"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg>TechByDave AI</a>
       </nav>
@@ -100,6 +101,16 @@
       <!-- Overview -->
       <section class="view" id="view-overview" hidden>
         <div class="kpis" id="kpis"></div>
+        <div class="row-even week-row">
+          <article class="panel">
+            <header class="panel-head"><div><h2>This week</h2><p class="muted small" id="goals-week"></p></div><button class="linkish" type="button" data-edit-goals>Edit goals</button></header>
+            <div id="goals" class="goals"></div>
+          </article>
+          <article class="panel">
+            <header class="panel-head"><h2>Needs you <span class="count" id="needs-count"></span></h2><a class="linkish" href="#deals">Deals</a></header>
+            <div id="needs-you" class="needs-you"></div>
+          </article>
+        </div>
         <div class="row-2">
           <article class="panel traffic">
             <header class="panel-head">
@@ -182,6 +193,18 @@
         <div class="board" id="board"></div>
       </section>
 
+      <!-- Brand deals -->
+      <section class="view" id="view-deals" hidden>
+        <div class="board-bar">
+          <p class="muted">Every brand you're working with, from first email to getting paid. Tap a card to edit it.</p>
+          <div class="deal-bar-actions"><button class="btn ghost sm" type="button" id="deals-closed">Show closed</button>
+          <button class="btn primary" type="button" data-new-deal><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New deal</button></div>
+        </div>
+        <div class="banner" id="deals-setup" hidden><div><b>One quick database update needed.</b> <span>Run the new part of supabase/schema.sql (Deals and goals) in Supabase's SQL editor.</span></div></div>
+        <div class="kpis deal-stats" id="deal-stats"></div>
+        <div class="deal-board" id="deal-board"></div>
+      </section>
+
       <section class="view" id="view-post" hidden>
         <div id="post-root"></div>
       </section>
@@ -197,6 +220,7 @@
       <button type="button" class="tab-add" data-open="checkin" aria-label="Weekly check-in"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
       <a href="#calendar" data-view="calendar"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendar</a>
       <a href="#ideas" data-view="ideas"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V17h5v-1.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></svg>Ideas</a>
+      <a href="#deals" data-view="deals"><svg viewBox="0 0 24 24"><path d="M12 3v18M16.5 7.5c0-1.7-2-3-4.5-3s-4.5 1.3-4.5 3 2 2.6 4.5 3.1 4.5 1.4 4.5 3.2-2 3.2-4.5 3.2-4.5-1.4-4.5-3.2"/></svg>Deals</a>
       <a href="#post" data-view="post"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>Post</a>
       <a href="#ask" data-view="ask"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg>AI</a>
       <button type="button" id="tab-signout"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign out</button>
@@ -242,6 +266,48 @@
     <div class="sheet-head"><h2 id="day-title"></h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
     <div id="day-items" class="stack"></div>
     <div class="sheet-actions"><span class="spacer"></span><button class="btn primary" type="button" id="day-add">Add an idea for this day</button></div>
+  </dialog>
+
+  <!-- Brand deal -->
+  <dialog class="sheet" id="deal-dialog" aria-labelledby="deal-title">
+    <form id="deal-form" novalidate>
+      <div class="sheet-head"><h2 id="deal-title">New brand deal</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+      <label for="dl-brand">Brand</label>
+      <input id="dl-brand" maxlength="80" required placeholder="e.g. Chipolo">
+      <div class="row-fields">
+        <div><label for="dl-contact">Contact <span class="muted">(optional)</span></label><input id="dl-contact" maxlength="120" placeholder="Name"></div>
+        <div><label for="dl-email">Email <span class="muted">(optional)</span></label><input id="dl-email" type="email" maxlength="160" placeholder="pr@brand.com"></div>
+      </div>
+      <label for="dl-product">Product or topic <span class="muted">(optional)</span></label>
+      <input id="dl-product" maxlength="160" placeholder="e.g. Chipolo POP trackers">
+      <div class="row-fields">
+        <div><label for="dl-kind">Type</label><select id="dl-kind"><option value="review">Free product to review</option><option value="paid">Paid post</option><option value="sponsor">Sponsorship</option><option value="affiliate">Affiliate</option><option value="other">Other</option></select></div>
+        <div><label for="dl-stage">Stage</label><select id="dl-stage"><option value="talking">Talking</option><option value="agreed">Agreed</option><option value="shipped">Product on the way</option><option value="creating">Making content</option><option value="posted">Posted</option><option value="paid">Paid</option><option value="closed">Closed (didn't happen)</option></select></div>
+        <div><label for="dl-value">Pay (CAD) <span class="muted">(optional)</span></label><input id="dl-value" type="number" min="0" step="1" inputmode="numeric" placeholder="0"></div>
+      </div>
+      <div class="row-fields">
+        <div><label for="dl-due">Content due <span class="muted">(optional)</span></label><input id="dl-due" type="date"></div>
+        <div><label for="dl-last_contact">Last contact</label><div class="with-btn"><input id="dl-last_contact" type="date"><button class="btn ghost sm" type="button" id="dl-today">Today</button></div></div>
+      </div>
+      <label for="dl-notes">Notes <span class="muted">(optional)</span></label>
+      <textarea id="dl-notes" rows="3" maxlength="4000" placeholder="What they want, deliverables, links, tracking number…"></textarea>
+      <p class="muted small">You'll get a follow-up nudge if a deal goes quiet for 7 days.</p>
+      <p class="form-msg" id="deal-msg" role="alert"></p>
+      <div class="sheet-actions"><button class="btn danger ghost" type="button" id="deal-delete" hidden>Delete</button><span class="spacer"></span><button class="btn ghost" type="button" data-close>Cancel</button><button class="btn primary" type="submit">Save deal</button></div>
+    </form>
+  </dialog>
+
+  <!-- Weekly goals -->
+  <dialog class="sheet" id="goals-dialog" aria-labelledby="goals-title">
+    <form id="goals-form" novalidate>
+      <div class="sheet-head"><h2 id="goals-title">Weekly goals</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+      <p class="muted">They reset every Monday. Goals for posts, reviews, subscribers and visits count themselves; the rest get a +1 button.</p>
+      <div class="goal-rows-head muted small"><span>Goal</span><span>Target</span><span>How it's counted</span><span></span></div>
+      <div id="goal-rows" class="goal-rows"></div>
+      <button class="btn ghost sm" type="button" id="goal-add">+ Add a goal</button>
+      <p class="form-msg" id="goals-msg" role="alert"></p>
+      <div class="sheet-actions"><span class="spacer"></span><button class="btn ghost" type="button" data-close>Cancel</button><button class="btn primary" type="submit">Save goals</button></div>
+    </form>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>

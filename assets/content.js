@@ -1,6 +1,8 @@
 // Reads your blog's drafts and published posts straight from the public GitHub repo,
 // so the calendar always shows what's actually there.
 
+import { todoCount } from "./drafts.js";
+
 export const REPO = "techbydave/techbydave";
 export const SITE = "https://techbydave.com";
 
@@ -36,11 +38,12 @@ export function toEvent(kind, file, md) {
   const title = fm.title || file.name.replace(/^\d{4}-\d{2}-\d{2}-/, "").replace(/\.md$/, "").replace(/-/g, " ");
   if (kind === "post") {
     const slug = fm.slug || file.name.replace(/^\d{4}-\d{2}-\d{2}-/, "").replace(/\.md$/, "");
-    return { type: "post", id: `post:${file.name}`, day: publishDay(fm, fileDay), title, verdict: (fm.verdict || "").toUpperCase(), url: `${SITE}/posts/${slug}.html` };
+    return { type: "post", id: `post:${file.name}`, day: publishDay(fm, fileDay), title, verdict: (fm.verdict || "").toUpperCase(),
+      review: (fm.type || "").toLowerCase() === "review", url: `${SITE}/posts/${slug}.html` };
   }
   const needsTake = /\[\[ADD YOUR TAKE/i.test(md);
   return {
-    type: "draft", id: `draft:${file.name}`, day: fileDay, title, needsTake,
+    type: "draft", id: `draft:${file.name}`, day: fileDay, title, needsTake, todo: todoCount(md), file: file.name,
     verdict: (fm.verdict || "").toUpperCase(),
     url: `https://github.com/${REPO}/edit/main/drafts/${file.name}`,
   };
@@ -56,7 +59,18 @@ async function listDir(dir) {
 function cacheGet(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }
 function cacheSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
 
+// One draft, fresh from GitHub, with the sha needed to save it back.
+export async function fetchDraft(name) {
+  const res = await fetch(`https://api.github.com/repos/${REPO}/contents/drafts/${encodeURIComponent(name)}?ref=main`,
+    { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" });
+  if (res.status === 404) throw new Error("This draft isn't there anymore. It may have just been published.");
+  if (!res.ok) throw new Error(`Couldn't load the draft from GitHub (${res.status}).`);
+  const data = await res.json();
+  return { sha: data.sha, base64: data.content };
+}
+
 export async function loadContent() {
+  try { for (const k of Object.keys(localStorage)) if (k.startsWith("tbd-md:")) localStorage.removeItem(k); } catch {}
   const [drafts, posts] = await Promise.all([listDir("drafts"), listDir("posts")]);
   const jobs = [...drafts.map((f) => ["draft", f]), ...posts.map((f) => ["post", f])];
   const events = [];
@@ -64,12 +78,13 @@ export async function loadContent() {
   async function worker() {
     while (i < jobs.length) {
       const [kind, f] = jobs[i++];
-      const key = `tbd-md:${f.sha}`;
+      const key = `tbd-md2:${f.sha}`;
       let md = cacheGet(key);
       if (md == null) {
         const r = await fetch(f.download_url);
         md = r.ok ? await r.text() : "";
-        if (md) cacheSet(key, md.slice(0, 4000)); // frontmatter + the take placeholder live near the top
+        // Drafts are kept whole (to count every placeholder); posts only need their frontmatter.
+        if (md) cacheSet(key, kind === "draft" ? md : md.slice(0, 4000));
       }
       events.push(toEvent(kind, f, md));
     }
