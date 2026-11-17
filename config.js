@@ -1,5 +1,5 @@
 // Dashboard settings: your Supabase project's address and PUBLIC key.
-// Safe to be public: the database's security rules only let dave@techbydave.com read or change anything.
+// Safe to be public: the database's security rules only let the admin account read or change anything.
 // (Repository variables SUPABASE_URL / SUPABASE_ANON_KEY override these when set.)
 window.DASH_CONFIG = {
   supabaseUrl: "https://cumnaymqcdhfsnklcsbx.supabase.co",
