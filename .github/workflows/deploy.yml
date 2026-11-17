@@ -41,6 +41,12 @@ jobs:
               require("fs").writeFileSync("_site/config.js", "window.DASH_CONFIG = " + JSON.stringify(cfg, null, 2) + ";\n");
             '
           fi
+      - name: Stamp file versions so browsers load the new code right away
+        run: |
+          V="${GITHUB_SHA::8}"
+          sed -i -E "s#(assets/(app\.js|styles\.css)|config\.js)\"#\1?v=$V\"#g" _site/index.html
+          sed -i -E "s#(from \"\./[a-z0-9-]+\.js)\"#\1?v=$V\"#g" _site/assets/*.js
+          grep -c "?v=$V" _site/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
