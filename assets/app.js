@@ -20,6 +20,34 @@ const FORCE_DEMO = new URLSearchParams(location.search).has("demo");
 const CONFIGURED = Boolean(cfg.supabaseUrl && cfg.supabaseAnonKey);
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+// ---------------------------------------------------------------------------
+// Light / dark theme (same toggle as techbydave.com). The choice is saved on this device.
+// ---------------------------------------------------------------------------
+function syncThemeUi() {
+  const t = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  const label = document.getElementById("theme-label");
+  if (label) label.textContent = t;
+  document.getElementById("theme-toggle")?.setAttribute("aria-label", `Switch to ${t === "dark" ? "light" : "dark"} mode`);
+  document.querySelector("meta[name=theme-color]")?.setAttribute("content", t === "light" ? "#f2f4fa" : "#070a14");
+}
+function flipTheme() {
+  const root = document.documentElement;
+  const next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+  root.setAttribute("data-theme", next);
+  try { localStorage.setItem("tbd-theme", next); } catch { /* private mode */ }
+  syncThemeUi();
+}
+document.getElementById("theme-toggle")?.addEventListener("click", (e) => {
+  if (!document.startViewTransition || REDUCED) return flipTheme();
+  const r = e.currentTarget.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+  const end = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+  document.startViewTransition(flipTheme).ready.then(() => {
+    document.documentElement.animate({ clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${end}px at ${x}px ${y}px)`] },
+      { duration: 700, easing: "cubic-bezier(.2,.8,.2,1)", pseudoElement: "::view-transition-new(root)" });
+  });
+});
+syncThemeUi();
+
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmt = (day, o) => new Date(day + "T00:00:00Z").toLocaleDateString("en-CA", { timeZone: "UTC", ...o });
