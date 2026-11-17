@@ -261,6 +261,22 @@ label { display: block; font-weight: 600; font-size: .88rem; margin: 14px 0 6px;
 .day-actions { grid-column: 2; display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .chip-tag { font: 700 .7rem var(--body); padding: 3px 8px; border-radius: 6px; background: color-mix(in srgb, var(--kc) 18%, transparent); color: var(--ink); box-shadow: inset 3px 0 0 var(--kc); align-self: start; }
 
+/* Tick-off checklist: a round check, then the title is struck through */
+.check { width: 30px; height: 30px; border-radius: 50%; padding: 0; display: grid; place-items: center; cursor: pointer; align-self: start;
+  border: 2px solid var(--line-2); background: transparent; color: transparent; transition: background .18s, border-color .18s, transform .12s; }
+.check:hover { border-color: var(--beacon); }
+.check:active { transform: scale(.9); }
+.check svg { width: 18px; height: 18px; }
+.check svg path { stroke-dasharray: 24; stroke-dashoffset: 24; transition: stroke-dashoffset .25s ease .05s; }
+.check-row.done .check { background: var(--beacon); border-color: var(--beacon); color: var(--on-beacon); }
+.check-row.done .check svg path { stroke-dashoffset: 0; }
+.check-row .muted.small .chip-tag { margin-right: 4px; font-size: .62rem; padding: 2px 6px; }
+.strike { background: linear-gradient(currentColor, currentColor) 0 55% / 0% 2px no-repeat; transition: background-size .3s ease, color .3s; }
+.check-row.done .strike { background-size: 100% 2px; color: var(--mute); }
+.check-row.done { opacity: .85; }
+.chip.done { text-decoration: line-through; opacity: .55; }
+@media (prefers-reduced-motion: reduce) { .check, .check svg path, .strike { transition: none; } }
+
 /* =================== Ideas board =================== */
 .board-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .board-bar p { margin: 0; }

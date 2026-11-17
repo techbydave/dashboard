@@ -350,6 +350,34 @@ function eventsByDay() {
   return map;
 }
 const TYPE_LABEL = { post: "Post", draft: "Draft", idea: "Idea" };
+// Ticking an idea in the day view moves it to the last stage ("posted"), shown as Done.
+const DONE = "posted";
+const CHECK_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12.5l4 4 8-9" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ideaStateLabel = (status) => (status === DONE ? "Done" : STAGES.find((s) => s[0] === status)?.[1] || "");
+
+async function toggleDone(btn) {
+  const idea = state.ideas.find((x) => x.id === btn.dataset.check);
+  if (!idea) return;
+  const row = btn.closest(".check-row");
+  const done = idea.status !== DONE;
+  const status = done ? DONE : (idea.prevStatus || "planned");
+  // Update the row right away so the strike-through animates, then save.
+  row.classList.toggle("done", done);
+  btn.setAttribute("aria-pressed", String(done));
+  btn.setAttribute("aria-label", `${done ? "Mark not done" : "Mark done"}: ${idea.title}`);
+  row.querySelector(".state").textContent = ideaStateLabel(status);
+  try {
+    const { prevStatus, ...rest } = idea;
+    await saveIdea({ ...rest, status }, true);
+    const saved = state.ideas.find((x) => x.id === idea.id);
+    if (saved && done) saved.prevStatus = idea.status;
+  } catch (err) {
+    row.classList.toggle("done", !done);
+    btn.setAttribute("aria-pressed", String(!done));
+    row.querySelector(".state").textContent = ideaStateLabel(idea.status);
+    toast(`Couldn't save: ${err.message}`);
+  }
+}
 const TYPE_MARK = { post: "✓", draft: "✎", idea: "✦" };
 
 function renderCalendar() {
@@ -363,7 +391,7 @@ function renderCalendar() {
     const shown = list.slice(0, 3);
     return `<div class="cell${inMonth ? "" : " out"}${day === today ? " today" : ""}${day < today ? " past" : ""}" data-day="${day}" tabindex="0" role="button" aria-label="${fmt(day, { weekday: "long", month: "long", day: "numeric" })}, ${list.length} item${list.length === 1 ? "" : "s"}">
       <span class="num">${Number(day.slice(8))}</span>
-      <div class="chips">${shown.map((e) => `<span class="chip ${e.type}" title="${TYPE_LABEL[e.type]}: ${esc(e.title)}"><em aria-label="${TYPE_LABEL[e.type]}:">${TYPE_MARK[e.type]}</em>${esc(e.title)}</span>`).join("")}
+      <div class="chips">${shown.map((e) => `<span class="chip ${e.type}${e.type === "idea" && e.status === DONE ? " done" : ""}" title="${TYPE_LABEL[e.type]}: ${esc(e.title)}"><em aria-label="${TYPE_LABEL[e.type]}:">${TYPE_MARK[e.type]}</em>${esc(e.title)}</span>`).join("")}
       ${list.length > 3 ? `<span class="more">+${list.length - 3} more</span>` : ""}</div>
       <div class="dots" aria-hidden="true">${list.slice(0, 4).map((e) => `<i class="${e.type}">${TYPE_MARK[e.type]}</i>`).join("")}</div>
     </div>`;
@@ -387,7 +415,10 @@ function openDay(day) {
       <div class="day-actions"><a class="btn ghost sm" href="${esc(e.url)}" target="_blank" rel="noopener">Read</a><button class="btn ghost sm" data-short="${esc(e.title)}">Make it a Short</button></div></div>`;
     if (e.type === "draft") return `<div class="day-item draft"><span class="chip-tag draft">Draft</span><div><b>${esc(e.title)}</b><span class="muted small">${e.needsTake ? "Needs your take before it can go live" : "Ready to publish"}</span></div>
       <div class="day-actions"><a class="btn ghost sm" href="${esc(e.url)}" target="_blank" rel="noopener">Finish on GitHub</a></div></div>`;
-    return `<div class="day-item idea"><span class="chip-tag idea">Idea</span><div><b>${esc(e.title)}</b><span class="muted small">${esc(e.platform || "")} · ${STAGES.find((s) => s[0] === e.status)?.[1] || ""}</span></div>
+    const done = e.status === DONE;
+    return `<div class="day-item idea check-row${done ? " done" : ""}">
+      <button class="check" type="button" data-check="${esc(e.id)}" aria-pressed="${done}" aria-label="${done ? "Mark not done" : "Mark done"}: ${esc(e.title)}">${CHECK_SVG}</button>
+      <div><b><span class="strike">${esc(e.title)}</span></b><span class="muted small"><span class="chip-tag idea">Idea</span> ${esc(e.platform || "")} · <span class="state">${ideaStateLabel(e.status)}</span></span></div>
       <div class="day-actions"><button class="btn ghost sm" data-idea="${esc(e.id)}">Edit</button></div></div>`;
   }).join("") : `<p class="muted">Nothing planned yet.</p>`;
   $("#day-add").onclick = () => { $("#day-dialog").close(); openIdea(null, { due: day, status: "planned" }); };
@@ -700,6 +731,8 @@ document.addEventListener("click", async (e) => {
   if (t.closest("[data-open=checkin]")) return openCheckin();
   const ni = t.closest("[data-new-idea]");
   if (ni) return openIdea(null, ni.dataset.stageNew ? { status: ni.dataset.stageNew } : {});
+  const ck = t.closest("[data-check]");
+  if (ck) return toggleDone(ck);
   const ib = t.closest("[data-idea]");
   if (ib) { $("#day-dialog").open && $("#day-dialog").close(); return openIdea(state.ideas.find((x) => x.id === ib.dataset.idea)); }
   const sh = t.closest("[data-short]");
