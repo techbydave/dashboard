@@ -15,6 +15,11 @@ const MODELS: Record<string, { provider: "gemini" | "claude"; id: string; fallba
 const DEFAULT_MODEL = "gemini-flash-lite";
 const MAX_MESSAGES = 40;
 const MAX_CHARS = 120_000;
+// Pictures (screenshots, photos, video frames) the page attaches to user messages.
+const MAX_IMAGES = 24, MAX_IMAGE_B64 = 2_000_000, MAX_TOTAL_B64 = 14_000_000;
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+type Img = { media_type: string; data: string };
+type Msg = { role: string; content: string; images?: Img[] };
 
 const SYSTEM = `You are TechByDave AI, Dave's personal assistant inside his private TechByDave dashboard.
 
@@ -32,7 +37,11 @@ How to respond:
 - Be honest: if an idea is weak or a number looks bad, say so kindly and suggest what to do about it.
 - When he shares numbers, read them carefully and don't invent figures you weren't given.
 - If you don't know something current (prices, launches, news), say so rather than guessing.
-- Write in plain language. Use Markdown sparingly (bold, short lists, code blocks for code).`;
+- Write in plain language. Use Markdown sparingly (bold, short lists, code blocks for code).
+
+When he attaches pictures:
+- Screenshots: read them closely (numbers, text, settings, errors) and answer about what's actually shown.
+- Videos arrive as still frames with their timestamps, without sound. Say so if sound matters. To help him make a video better, be specific and tied to timestamps: the hook in the first 2 seconds, on-screen text size and placement (keep clear of the bottom and right edges where TikTok, Reels and Shorts put their buttons), pacing and dead moments to cut, framing and lighting, the end card, and which frame would make the best cover. Give the 3 changes with the biggest payoff first.`;
 
 function cors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -64,9 +73,22 @@ Deno.serve(async (req) => {
   let body: { messages?: unknown; model?: unknown; context?: unknown };
   try { body = await req.json(); } catch { return json({ error: "Bad request." }, 400, h); }
   const raw = Array.isArray(body.messages) ? body.messages.slice(-MAX_MESSAGES) : [];
-  const messages = raw
-    .filter((m: any) => (m?.role === "user" || m?.role === "assistant") && typeof m?.content === "string" && m.content.trim())
-    .map((m: any) => ({ role: m.role, content: m.content.slice(0, 20_000) }));
+  let imageCount = 0, imageBytes = 0, badImage = false;
+  const messages: Msg[] = raw
+    .filter((m: any) => (m?.role === "user" || m?.role === "assistant") && typeof m?.content === "string" && (m.content.trim() || Array.isArray(m.images)))
+    .map((m: any) => {
+      const out: Msg = { role: m.role, content: (m.content || "").slice(0, 20_000) };
+      if (m.role === "user" && Array.isArray(m.images)) {
+        const imgs = m.images.filter((i: any) => IMAGE_TYPES.has(i?.media_type) && typeof i?.data === "string" && /^[A-Za-z0-9+/=]+$/.test(i.data));
+        if (imgs.length !== m.images.length || imgs.some((i: Img) => i.data.length > MAX_IMAGE_B64)) badImage = true;
+        imageCount += imgs.length; imageBytes += imgs.reduce((n: number, i: Img) => n + i.data.length, 0);
+        if (imgs.length) out.images = imgs.map((i: Img) => ({ media_type: i.media_type, data: i.data }));
+        if (!out.content.trim()) out.content = "(see the attached pictures)";
+      }
+      return out;
+    });
+  if (badImage) return json({ error: "One of the pictures couldn't be read. Try a JPG or PNG." }, 400, h);
+  if (imageCount > MAX_IMAGES || imageBytes > MAX_TOTAL_B64) return json({ error: "Too many pictures in this chat. Start a new chat and attach fewer files." }, 400, h);
   while (messages.length && messages[0].role !== "user") messages.shift();
   if (!messages.length || messages[messages.length - 1].role !== "user") return json({ error: "Send a message first." }, 400, h);
   if (messages.reduce((n, m) => n + m.content.length, 0) > MAX_CHARS) return json({ error: "This chat is too long. Start a new one." }, 400, h);
@@ -81,10 +103,13 @@ Deno.serve(async (req) => {
   // 3. Ask Claude and stream the answer straight back.
   const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) return json({ error: "Claude isn't set up: add ANTHROPIC_API_KEY in Supabase (Edge Functions > Secrets), or pick a Gemini model." }, 500, h);
+  const claudeMessages = messages.map((m) => m.images?.length
+    ? { role: m.role, content: [...m.images.map((i) => ({ type: "image", source: { type: "base64", media_type: i.media_type, data: i.data } })), { type: "text", text: m.content }] }
+    : { role: m.role, content: m.content });
   const upstream = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({ model: choice.id, max_tokens: 4096, system, messages, stream: true }),
+    body: JSON.stringify({ model: choice.id, max_tokens: 4096, system, messages: claudeMessages, stream: true }),
   });
   if (!upstream.ok || !upstream.body) {
     const text = await upstream.text();
@@ -96,12 +121,13 @@ Deno.serve(async (req) => {
 });
 
 // ---- Google Gemini: stream, then re-emit as the same text events the page already understands ----
-async function gemini(choice: { id: string; fallback?: string }, system: string, messages: { role: string; content: string }[], h: Record<string, string>) {
+async function gemini(choice: { id: string; fallback?: string }, system: string, messages: Msg[], h: Record<string, string>) {
   const key = Deno.env.get("GEMINI_API_KEY");
   if (!key) return json({ error: "Gemini isn't set up: add GEMINI_API_KEY in Supabase (Edge Functions > Secrets)." }, 500, h);
   const body = JSON.stringify({
     systemInstruction: { parts: [{ text: system }] },
-    contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+    contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user",
+      parts: [...(m.images ?? []).map((i) => ({ inline_data: { mime_type: i.media_type, data: i.data } })), { text: m.content }] })),
     generationConfig: { maxOutputTokens: 4096 },
   });
   // If a model hasn't started answering within 20s (busy free tier), give up on it and use the fallback.

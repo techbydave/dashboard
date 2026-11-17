@@ -410,6 +410,25 @@ dialog::backdrop { background: rgba(4,6,14,.6); backdrop-filter: blur(3px); }
 .chat-send.stop { background: var(--panel-2); color: var(--ink); border: 1px solid var(--line-2); }
 .chat-send.stop svg { fill: currentColor; stroke: none; }
 .chat-foot { text-align: center; font-size: .75rem; margin: 0; }
+.chat-compose { flex-wrap: wrap; }
+.chat-compose textarea { min-width: 0; }
+.chat-compose.drop { border-color: var(--beacon); background: color-mix(in srgb, var(--beacon) 8%, var(--panel)); }
+.chat-attach-row { flex-basis: 100%; display: flex; gap: 8px; flex-wrap: wrap; padding: 2px 0 4px; }
+.chat-attach-row[hidden] { display: none; }
+.chip-file { display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 4px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); font-size: .8rem; font-weight: 600; color: var(--ink-2); }
+.chip-file img { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; }
+.chip-file button { border: 0; background: none; color: var(--mute); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 2px 4px; }
+.chip-file button:hover { color: var(--ink); }
+.chip-file .spin { width: 40px; height: 40px; border-radius: 8px; background: linear-gradient(90deg, var(--panel-2), var(--line), var(--panel-2)); background-size: 200% 100%; animation: shimmer 1s linear infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.chat-clip { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 12px; cursor: pointer; background: transparent; color: var(--mute); margin-left: -8px; }
+.chat-clip:hover { color: var(--ink); background: var(--panel-2); }
+.chat-clip svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.msg-files { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.msg-file { position: relative; margin: 0; }
+.msg-file img { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; display: block; }
+.msg-file.video img { width: 72px; height: 128px; }
+.msg-file figcaption { position: absolute; left: 4px; bottom: 4px; font-size: .7rem; font-weight: 700; color: #fff; background: rgba(0,0,0,.6); padding: 1px 6px; border-radius: 6px; }
 @media (max-width: 760px) {
   .chat { height: calc(100dvh - 190px - env(safe-area-inset-bottom)); min-height: 380px; }
   .chat-suggest { grid-template-columns: 1fr; }

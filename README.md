@@ -104,6 +104,8 @@ Setup (once):
 2. Supabase → **Edge Functions → Secrets**: add `GEMINI_API_KEY`. (Optional: add `ANTHROPIC_API_KEY` too, to use the Claude models in the picker.)
 3. The function is deployed from `supabase/functions/ask-claude/index.ts` (Edge Functions → ask-claude → Code). Its "Verify JWT with legacy secret" setting is off because the function checks admin access itself.
 
+**Attach pictures and videos:** tap 📎, paste a screenshot (Ctrl+V) or drag files onto the chat. Photos and screenshots are shrunk before sending. Videos are sent as about 12 still frames with their timestamps (no sound), which is enough for feedback on the hook, captions, pacing, framing and cover. Pictures stay for the current visit only; saved chats keep small thumbnails.
+
 Gemini's free tier is rate-limited, and Google may use free-tier requests to improve its products, so don't paste anything private you wouldn't want used that way.
 
 ## Post to socials

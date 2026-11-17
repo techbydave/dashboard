@@ -274,3 +274,16 @@ test("deal totals add up open, agreed and paid money", () => {
   ], "2026-11-16");
   assert.deepEqual(t, { active: 2, agreed: 300, paidThisYear: 200, attention: 0 });
 });
+
+import { frameTimes, clock } from "../assets/chat.js";
+
+test("frameTimes spreads frames across a video without going past the end", () => {
+  const t = frameTimes(42);
+  assert.equal(t.length, 12);
+  assert.ok(t[0] > 0 && t[0] < 0.5);
+  assert.ok(t.at(-1) < 42 && t.at(-1) > 40);
+  assert.ok(t.every((x, i) => i === 0 || x > t[i - 1]));
+  assert.equal(frameTimes(6).length, 2);
+  assert.deepEqual(frameTimes(NaN), [0]);
+  assert.equal(clock(75), "1:15");
+});
