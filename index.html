@@ -73,6 +73,7 @@
         <a href="#calendar" data-view="calendar"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendar</a>
         <a href="#ideas" data-view="ideas"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V17h5v-1.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></svg>Ideas</a>
         <a href="#deals" data-view="deals"><svg viewBox="0 0 24 24"><path d="M12 3v18M16.5 7.5c0-1.7-2-3-4.5-3s-4.5 1.3-4.5 3 2 2.6 4.5 3.1 4.5 1.4 4.5 3.2-2 3.2-4.5 3.2-4.5-1.4-4.5-3.2"/></svg>Brand deals</a>
+        <a href="#webcreator" data-view="webcreator"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M6.5 6.5h.01M9.5 6.5h.01M8 13l-2 2 2 2M16 13l2 2-2 2"/></svg>WebCreator</a>
         <a href="#learn" data-view="learn"><svg viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16"/></svg>Learn to code</a>
       <a href="#notes" data-view="notes"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></svg>Notes</a>
         <a href="#post" data-view="post"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>Post to socials</a>
@@ -210,6 +211,32 @@
         <div class="deal-board" id="deal-board"></div>
       </section>
 
+      <!-- WebCreator -->
+      <section class="view" id="view-webcreator" hidden>
+        <article class="panel wc-hero">
+          <div>
+            <p class="eyebrow">Your web design business</p>
+            <h2>WebCreator</h2>
+            <p class="muted">Websites, dashboards and launch kits for small businesses. Track your clients, your numbers and what you sell.</p>
+          </div>
+          <div class="wc-hero-actions">
+            <a class="btn primary" id="wc-site" target="_blank" rel="noopener">Open site ↗</a>
+            <button class="btn ghost" type="button" data-wc-numbers>Update numbers</button>
+          </div>
+          <nav class="wc-links" id="wc-links" aria-label="WebCreator links"></nav>
+        </article>
+        <div class="kpis" id="wc-stats"></div>
+        <div class="board-bar">
+          <div><h2 class="wc-sub">Client work</h2><p class="muted">Leads to delivered sites. Drag cards between columns, tap one to edit it.</p></div>
+          <button class="btn primary" type="button" data-new-wc data-stage-new="idea"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New client</button>
+        </div>
+        <div class="board" id="wc-board"></div>
+        <article class="panel wc-offer">
+          <header class="panel-head"><h2>What you sell</h2></header>
+          <div class="wc-offer-grid" id="wc-offer"></div>
+        </article>
+      </section>
+
       <section class="view" id="view-learn" hidden>
         <div id="learn-root"></div>
       </section>
@@ -234,6 +261,7 @@
       <a href="#calendar" data-view="calendar"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendar</a>
       <a href="#ideas" data-view="ideas"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V17h5v-1.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></svg>Ideas</a>
       <a href="#deals" data-view="deals"><svg viewBox="0 0 24 24"><path d="M12 3v18M16.5 7.5c0-1.7-2-3-4.5-3s-4.5 1.3-4.5 3 2 2.6 4.5 3.1 4.5 1.4 4.5 3.2-2 3.2-4.5 3.2-4.5-1.4-4.5-3.2"/></svg>Deals</a>
+      <a href="#webcreator" data-view="webcreator"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M6.5 6.5h.01M9.5 6.5h.01M8 13l-2 2 2 2M16 13l2 2-2 2"/></svg>Web</a>
       <a href="#learn" data-view="learn"><svg viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16"/></svg>Learn</a>
       <a href="#notes" data-view="notes"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></svg>Notes</a>
       <a href="#post" data-view="post"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>Post</a>
@@ -309,6 +337,17 @@
       <p class="muted small">You'll get a follow-up nudge if a deal goes quiet for 7 days.</p>
       <p class="form-msg" id="deal-msg" role="alert"></p>
       <div class="sheet-actions"><button class="btn danger ghost" type="button" id="deal-delete" hidden>Delete</button><span class="spacer"></span><button class="btn ghost" type="button" data-close>Cancel</button><button class="btn primary" type="submit">Save deal</button></div>
+    </form>
+  </dialog>
+
+  <!-- WebCreator numbers -->
+  <dialog class="sheet" id="wc-dialog" aria-labelledby="wc-title">
+    <form id="wc-form" novalidate>
+      <div class="sheet-head"><h2 id="wc-title">WebCreator numbers</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+      <p class="muted">Type today's totals. Leave anything blank to skip it.</p>
+      <div class="checkin-grid" id="wc-fields"></div>
+      <p class="form-msg" id="wc-msg" role="alert"></p>
+      <div class="sheet-actions"><span class="spacer"></span><button class="btn ghost" type="button" data-close>Cancel</button><button class="btn primary" type="submit">Save numbers</button></div>
     </form>
   </dialog>
 

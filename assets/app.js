@@ -15,6 +15,7 @@ import { sessionAt, session } from "./learn-plan.js";
 import { logoTile } from "./logos.js";
 import { createChat } from "./chat.js";
 import { createPoster } from "./post.js";
+import { WC_SOURCE, WC_SITE, WC_LINKS, WC_NUMBERS, WC_STAGES, WC_OFFER, clientBoard, isClientWork } from "./webcreator.js";
 
 const TZ = "America/Toronto";
 const cfg = window.DASH_CONFIG || {};
@@ -489,6 +490,68 @@ function renderBoard() {
 }
 
 // ---------------------------------------------------------------------------
+// WebCreator: the freelance website business
+// ---------------------------------------------------------------------------
+function renderWebCreator() {
+  const today = todayIn(TZ), from = addDays(today, -29);
+  $("#wc-site").href = WC_SITE;
+  $("#wc-links").innerHTML = WC_LINKS.map(([t, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)} ↗</a>`).join("");
+  $("#wc-stats").innerHTML = WC_NUMBERS.map((n, i) => {
+    const pts = series(state.rows, WC_SOURCE, n.metric);
+    const g = growth(state.rows, WC_SOURCE, n.metric, from, today);
+    const last = pts[pts.length - 1];
+    const value = g.now == null ? "–" : n.money ? money(g.now) : compact(g.now);
+    const delta = g.change == null || pts.length < 2 ? "" : deltaChip(g.change, { suffix: n.money ? " CAD" : "" });
+    const sub = last ? `${esc(n.hint)} · updated ${relDay(last.day, today).toLowerCase()}` : `${esc(n.hint)} · not entered yet`;
+    return `<article class="kpi" style="--i:${i}"><div class="kpi-top"><span class="kpi-label">${esc(n.label)}</span>${delta}</div>
+      <div class="kpi-num">${value}</div><div class="kpi-foot"><span class="muted small">${sub}</span>${pts.length > 1 ? sparkline(pts.slice(-30), { w: 104, h: 30 }) : ""}</div></article>`;
+  }).join("");
+  $("#wc-board").innerHTML = clientBoard(state.ideas).map(({ key, label, items }) => `<section class="col" data-stage="${key}">
+      <header><h2>${label}</h2><span class="count">${items.length}</span></header>
+      <div class="col-body">
+        ${items.map((i) => `<button class="card" draggable="true" data-drag="${esc(i.id)}" data-idea="${esc(i.id)}">
+          <span class="tag">${esc(i.platform)}</span>
+          <b>${esc(i.title)}</b>
+          ${i.notes ? `<span class="muted small clamp">${esc(i.notes)}</span>` : ""}
+          ${i.due ? `<span class="due${i.due < today && key !== "posted" ? " late" : ""}">${relDay(i.due, today)}</span>` : ""}
+        </button>`).join("")}
+        <button class="add-card" data-new-wc data-stage-new="${key}">+ Add</button>
+      </div>
+    </section>`).join("");
+  const list = (title, items) => `<div><h3>${title}</h3><ul>${items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
+  $("#wc-offer").innerHTML = list("The package", WC_OFFER.package) + list("Add-ons", WC_OFFER.addons);
+}
+
+function openWcNumbers() {
+  $("#wc-fields").innerHTML = WC_NUMBERS.map((n) => {
+    const pts = series(state.rows, WC_SOURCE, n.metric), last = pts[pts.length - 1];
+    return `<label class="ci" for="wc-${n.metric}"><span class="ci-name">${esc(n.label)}<span class="muted small">${last ? `Last: ${n.money ? money(last.value) : compact(last.value)} on ${fmt(last.day, { month: "short", day: "numeric" })}` : esc(n.hint)}</span></span>
+      <input id="wc-${n.metric}" data-metric="${n.metric}" type="number" inputmode="numeric" min="0" step="1" placeholder="${last ? esc(String(last.value)) : "0"}"></label>`;
+  }).join("");
+  $("#wc-msg").textContent = "";
+  $("#wc-dialog").showModal();
+  $("#wc-fields input")?.focus();
+}
+
+$("#wc-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const day = todayIn(TZ), rows = [];
+  for (const inp of $("#wc-fields").querySelectorAll("input")) {
+    if (inp.value === "") continue;
+    const v = Number(inp.value);
+    if (!Number.isFinite(v) || v < 0) { $("#wc-msg").textContent = "Numbers only, please (no commas or letters)."; return inp.focus(); }
+    rows.push({ day, source: WC_SOURCE, metric: inp.dataset.metric, value: Math.round(v) });
+  }
+  if (!rows.length) { $("#wc-msg").textContent = "Add at least one number."; return; }
+  try {
+    await store.saveMetrics(rows);
+    const keys = new Set(rows.map((r) => `${r.day}|${r.source}|${r.metric}`));
+    state.rows = [...state.rows.filter((r) => !keys.has(`${r.day}|${r.source}|${r.metric}`)), ...rows];
+    $("#wc-dialog").close(); renderAll(); toast("WebCreator numbers saved");
+  } catch (ex) { $("#wc-msg").textContent = ex.message; }
+});
+
+// ---------------------------------------------------------------------------
 // Needs you: drafts waiting on Dave + deals that need attention
 // ---------------------------------------------------------------------------
 const draftTodo = (d) => (d.todo ?? (d.needsTake ? 1 : 0));
@@ -694,10 +757,11 @@ $("#deal-delete").addEventListener("click", async (e) => {
 // Dialogs: idea + check-in
 // ---------------------------------------------------------------------------
 let editingIdea = null;
+const WC_PLATFORMS_NEW = new Set(["WebCreator", "Client"]);
 function openIdea(idea, preset = {}) {
   editingIdea = idea;
   const v = { title: "", platform: "TikTok", status: "idea", due: "", notes: "", ...(idea || {}), ...preset };
-  $("#idea-title").textContent = idea ? "Edit idea" : "New idea";
+  $("#idea-title").textContent = idea ? (isClientWork(idea) ? "Edit client" : "Edit idea") : (WC_PLATFORMS_NEW.has(v.platform) ? "New client" : "New idea");
   $("#i-title").value = v.title; $("#i-platform").value = v.platform || "Blog"; $("#i-status").value = v.status;
   $("#i-due").value = v.due || ""; $("#i-notes").value = v.notes || "";
   $("#idea-delete").hidden = !idea; $("#idea-delete").textContent = "Delete"; delete $("#idea-delete").dataset.armed;
@@ -775,6 +839,9 @@ for (const d of document.querySelectorAll("dialog")) d.addEventListener("click",
 document.addEventListener("click", async (e) => {
   const t = e.target;
   if (t.closest("[data-open=checkin]")) return openCheckin();
+  if (t.closest("[data-wc-numbers]")) return openWcNumbers();
+  const nw = t.closest("[data-new-wc]");
+  if (nw) return openIdea(null, { platform: "WebCreator", status: nw.dataset.stageNew || "idea" });
   const ni = t.closest("[data-new-idea]");
   if (ni) return openIdea(null, ni.dataset.stageNew ? { status: ni.dataset.stageNew } : {});
   const ck = t.closest("[data-check]");
@@ -826,7 +893,7 @@ document.addEventListener("drop", async (e) => {
   e.preventDefault(); tgt.classList.remove("drop");
   try {
     if (tgt.dataset.day) { await saveIdea({ ...idea, due: tgt.dataset.day, status: idea.status === "idea" ? "planned" : idea.status }, true); toast(`Scheduled for ${fmt(tgt.dataset.day, { weekday: "short", month: "short", day: "numeric" })}`); }
-    else if (tgt.dataset.stage !== idea.status) { await saveIdea({ ...idea, status: tgt.dataset.stage }, true); toast(`Moved to ${STAGES.find((s) => s[0] === tgt.dataset.stage)[1]}`); }
+    else if (tgt.dataset.stage !== idea.status) { await saveIdea({ ...idea, status: tgt.dataset.stage }, true); toast(`Moved to ${(state.view === "webcreator" ? WC_STAGES : STAGES).find((s) => s[0] === tgt.dataset.stage)[1]}`); }
   } catch (ex) { toast(ex.message); }
 });
 
@@ -841,7 +908,7 @@ $("#range").addEventListener("click", (e) => {
 });
 function syncRange() { for (const b of $("#range").children) b.setAttribute("aria-checked", String(Number(b.dataset.days) === state.days)); }
 
-const TITLES = { overview: null, search: "Google Search", calendar: "Content calendar", ideas: "Ideas board", deals: "Brand deals", notes: "Notes", learn: "Learn to code", ask: "TechByDave AI", post: "Post to socials" };
+const TITLES = { overview: null, search: "Google Search", calendar: "Content calendar", ideas: "Ideas board", deals: "Brand deals", webcreator: "WebCreator", notes: "Notes", learn: "Learn to code", ask: "TechByDave AI", post: "Post to socials" };
 function route() {
   const v = (location.hash || "#overview").slice(1);
   state.view = TITLES.hasOwnProperty(v) ? v : "overview";
@@ -861,6 +928,7 @@ function renderAll() {
   if (state.view === "calendar") renderCalendar();
   if (state.view === "ideas") renderBoard();
   if (state.view === "deals") renderDeals();
+  if (state.view === "webcreator") renderWebCreator();
   if (state.view === "notes") renderNotes();
   if (state.view === "learn") renderLearn();
   if (state.view === "ask") renderAsk();
@@ -895,6 +963,9 @@ function chatContext() {
     const g = growth(state.rows, p.id, p.metric, from, today);
     if (g.now != null) lines.push(`- ${p.name}: ${g.now} ${p.unit}${g.change != null ? ` (${g.change >= 0 ? "+" : ""}${g.change} in 30 days)` : ""}${p.manual ? ", entered by hand" : ""}`);
   }
+  const wc = WC_NUMBERS.map((n) => { const p = series(state.rows, WC_SOURCE, n.metric).pop(); return p ? `${n.label.toLowerCase()} ${p.value}` : null; }).filter(Boolean);
+  const wcOpen = state.ideas.filter((i) => isClientWork(i) && i.status !== "posted").map((i) => `${i.title} [${WC_STAGES.find((s) => s[0] === i.status)?.[1] || i.status}]`);
+  if (wc.length || wcOpen.length) lines.push(`- WebCreator (freelance websites, webcreator.techbydave.com): ${[wc.join(", "), wcOpen.length ? `open client work: ${wcOpen.join("; ")}` : ""].filter(Boolean).join("; ")}`);
   const visits = sum(series(state.rows, "website", "visits", from, today));
   if (visits) lines.push(`- Website: ${visits} visits in the last 30 days`);
   const clicks = sum(series(state.rows, "search", "clicks", from, today)), impr = sum(series(state.rows, "search", "impressions", from, today));

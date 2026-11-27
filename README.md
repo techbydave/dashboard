@@ -7,6 +7,7 @@ Your private mission control at **dashboard.techbydave.com**: website traffic, f
 | **Overview** | Total audience, website visits, newsletter subscribers and posts published, each with change over 7, 30 or 90 days. A website-visits chart (hover for each day, or open the table view). A card per platform. "Up next": what's due soon and which drafts still need your take. |
 | **Calendar** | A month view of published posts (✓), drafts (✎) and ideas (✦), pulled live from the `techbydave/techbydave` repo. Drag an unscheduled idea onto a day to schedule it. Tap a day to see everything on it, or turn any post into a Short idea. |
 | **Ideas** | A board with Ideas → Planned → Making it → Posted. Drag cards between columns. |
+| **WebCreator** | Your freelance website business: links to webcreator.techbydave.com, Fiverr, Upwork and @webcreator.dave, your numbers (Instagram followers, clients, earnings, reviews; tap "Update numbers"), a Leads → Booked → Building → Delivered board for client work, and what you sell. Uses the existing tables, so no database update is needed. |
 | **Weekly check-in** | A 30-second form for the apps without a free API (TikTok, X, Pinterest). |
 
 ## Where the numbers come from
