@@ -308,28 +308,28 @@ test("learn plan: 35 weeks of five days, phases cover every week", () => {
   assert.equal(TOTAL, 175);
 });
 
-test("learn plan: dates map to weekdays from Mon Nov 23 2026", () => {
-  assert.equal(sessionDate(0), "2026-11-23");
-  assert.equal(sessionDate(4), "2026-11-27");
-  assert.equal(sessionDate(5), "2026-11-30");
-  assert.equal(sessionDate(TOTAL - 1), "2027-07-23");
-  assert.equal(sessionAt("2026-11-28"), null); // Saturday
-  assert.equal(sessionAt("2026-11-22"), null);
-  assert.equal(sessionAt("2026-12-25"), 24);
-  assert.equal(session(24).holiday, "Christmas");
+test("learn plan: dates map to weekdays from Mon Nov 30 2026", () => {
+  assert.equal(sessionDate(0), "2026-11-30");
+  assert.equal(sessionDate(4), "2026-12-04");
+  assert.equal(sessionDate(5), "2026-12-07");
+  assert.equal(sessionDate(TOTAL - 1), "2027-07-30");
+  assert.equal(sessionAt("2026-12-05"), null); // Saturday
+  assert.equal(sessionAt("2026-11-29"), null);
+  assert.equal(sessionAt("2026-12-25"), 19);
+  assert.equal(session(19).holiday, "Christmas");
   assert.equal(session(60).phase.key, "sql");
   for (let i = 0; i < TOTAL; i++) assert.equal(sessionAt(sessionDate(i)), i);
 });
 
 test("learn plan: current session, streak, missed and progress", () => {
-  assert.equal(currentSession("2026-11-17"), 0);           // before the start
-  assert.equal(currentSession("2026-11-28"), 5);           // Saturday -> next Monday
+  assert.equal(currentSession("2026-11-24"), 0);           // before the start
+  assert.equal(currentSession("2026-12-05"), 5);           // Saturday -> next Monday
   assert.equal(currentSession("2027-09-01"), TOTAL - 1);   // after the end
-  const done = ["2026-11-23", "2026-11-24", "2026-11-26", "2026-11-27"];
-  assert.equal(streak(done, "2026-11-27"), 2);
-  assert.equal(streak(done, "2026-11-29"), 2);             // weekend keeps the streak
-  assert.equal(streak(done, "2026-11-30"), 2);             // today not ticked yet still counts the run before it
-  assert.equal(streak(["2026-11-30", ...done], "2026-11-30"), 3);
-  assert.deepEqual(missed(done, "2026-11-30"), [2]);
+  const done = ["2026-11-30", "2026-12-01", "2026-12-03", "2026-12-04"];
+  assert.equal(streak(done, "2026-12-04"), 2);
+  assert.equal(streak(done, "2026-12-06"), 2);             // weekend keeps the streak
+  assert.equal(streak(done, "2026-12-07"), 2);             // today not ticked yet still counts the run before it
+  assert.equal(streak(["2026-12-07", ...done], "2026-12-07"), 3);
+  assert.deepEqual(missed(done, "2026-12-07"), [2]);
   assert.deepEqual(phaseProgress(PHASES[0], done), { done: 4, total: 15 });
 });
