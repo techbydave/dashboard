@@ -2,7 +2,7 @@
 // HTML & CSS -> JavaScript -> SQL -> Python -> Swift -> a final project.
 // Pure data and helpers (no DOM), so they can be unit tested.
 
-export const LEARN_START = "2026-11-23"; // Monday
+export const LEARN_START = "2026-11-30"; // Monday
 
 const yt = (q) => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
 
@@ -124,14 +124,14 @@ export const WEEKS = [
     "Loops: for and while. Count to 100, print every gadget in a list.",
     "Arrays: make a list of gadgets, add and remove items.",
     "Practice: 3 small exercises on arrays and loops (freeCodeCamp).",
-    "Holiday. Rest, or review anything that felt hard.",
+    "Holiday. Rest. Happy New Year!",
   ]],
   ["Objects", [
-    "Holiday catch-up: re-read your notes from the last two weeks.",
+    "Catch-up: re-read your notes from the last two weeks.",
     "Objects: describe a gadget with name, price, rating.",
     "Array methods: map, filter, find. Filter gadgets under $100.",
     "Review weak spots. Redo one exercise you struggled with.",
-    "Holiday. Rest. Happy New Year!",
+    "Practice: 3 small exercises on objects and array methods (freeCodeCamp).",
   ]],
   ["Making pages interactive (the DOM)", [
     "Select elements on a page and change their text.",

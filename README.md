@@ -141,7 +141,7 @@ The **Notes** page is a notebook for plans, scripts and DMs. It understands simp
 ## Learn to code
 
 An 8-month, 1-hour-a-day (Monday to Friday) plan: HTML & CSS, JavaScript, SQL, Python, Swift, then a final
-project. It starts Monday, Nov 23, 2026. The lessons, free tools and videos live in `assets/learn-plan.js`;
+project. It starts Monday, Nov 30, 2026. The lessons, free tools and videos live in `assets/learn-plan.js`;
 tick a day off and it's saved in the `learn_ticks` table. Today's lesson also shows in "Needs you" until it's done.
 If the Learn page says it needs a database update, run the "Learn to code" block at the end of `supabase/schema.sql`
 in the Supabase SQL editor.
